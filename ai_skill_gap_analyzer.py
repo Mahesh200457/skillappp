@@ -10,10 +10,11 @@ from typing import List
 from io import BytesIO
 import os
 import time
+import re
 
 # ✅ Updated Gemini API credentials
 GEMINI_API_KEY = "AIzaSyB-aZF6eOVKgE8TLD_ZCYm_lS6AIzw_1Yw"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
 
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
@@ -125,8 +126,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------- Enhanced API Call Function ----------------------------
-def call_gemini_api(prompt: str, max_tokens: int = 1000) -> str:
-    """Enhanced Gemini API call with better error handling and user feedback"""
+def call_gemini_api(prompt: str, max_tokens: int = 2000) -> str:
+    """Enhanced Gemini API call with better error handling"""
     
     if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_API_KEY_HERE":
         return "❌ Please configure a valid Gemini API key."
@@ -136,17 +137,11 @@ def call_gemini_api(prompt: str, max_tokens: int = 1000) -> str:
     data = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.7,
+            "temperature": 0.3,
             "topK": 40,
             "topP": 0.95,
             "maxOutputTokens": max_tokens,
-        },
-        "safetySettings": [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"}
-        ]
+        }
     }
 
     try:
@@ -169,21 +164,10 @@ def call_gemini_api(prompt: str, max_tokens: int = 1000) -> str:
             else:
                 st.error("🚨 No candidates in API response. The request may have been blocked.")
                 return "❌ No valid response from AI"
-        
-        # Handle different error codes with user-friendly messages
-        error_messages = {
-            400: "Invalid request format. Please try again.",
-            401: "API key authentication failed. Please check your API key.",
-            403: "API access forbidden. Your API key might be invalid or quota exceeded.",
-            404: "API endpoint not found. The service might be temporarily unavailable.",
-            429: "Rate limit exceeded. Please wait a moment and try again.",
-            500: "Google AI service temporarily unavailable. Please try again later."
-        }
-        
-        error_msg = error_messages.get(response.status_code, f"API error (Status: {response.status_code})")
-        st.error(f"🚨 {error_msg}")
-        st.error(f"Response: {response.text[:500]}")  # Show first 500 chars of error response
-        return f"❌ {error_msg}"
+        else:
+            st.error(f"🚨 API Error (Status: {response.status_code})")
+            st.error(f"Response: {response.text[:500]}")
+            return f"❌ API Error (Status: {response.status_code})"
             
     except requests.exceptions.Timeout:
         st.error("⏰ Request timeout. Please try again.")
@@ -198,7 +182,7 @@ def call_gemini_api(prompt: str, max_tokens: int = 1000) -> str:
 # ----------------------- API Connection Test ----------------------------
 def test_gemini_connection():
     """Test Gemini API with a simple prompt"""
-    test_prompt = "Respond with exactly: 'API connection successful'"
+    test_prompt = "Say 'API connection successful' and nothing else."
     result = call_gemini_api(test_prompt, max_tokens=50)
     return "successful" in result.lower() and not result.startswith("❌")
 
@@ -224,24 +208,37 @@ def extract_text_from_pdf(uploaded_file):
 
 def analyze_resume_with_ai(text: str) -> dict:
     """Enhanced resume analysis with structured output"""
+    
+    # Limit text to prevent token overflow
+    limited_text = text[:8000] if len(text) > 8000 else text
+    
     prompt = f"""
-    Analyze this resume and extract information in the following JSON-like format:
-    
-    Name: [Full name of the person]
-    Email: [Email address]
-    Phone: [Phone number]
-    Skills: [List all technical skills, separated by commas]
-    Education: [Educational qualifications]
-    Experience: [Work experience summary]
-    Certifications: [Any certifications mentioned]
-    
-    Resume Text:
-    {text[:4000]}
-    
-    Please provide clear, structured information for each field. If any field is not found, write "Not specified".
+    Analyze this resume text and extract the following information. Be very thorough and look for all details:
+
+    RESUME TEXT:
+    {limited_text}
+
+    Please extract and format the response EXACTLY like this:
+
+    Name: [Extract the person's full name]
+    Email: [Extract email address]
+    Phone: [Extract phone number]
+    Skills: [List ALL technical skills, programming languages, tools, frameworks, technologies mentioned - separate with commas]
+    Education: [Extract educational qualifications, degrees, institutions]
+    Experience: [Summarize work experience and roles]
+    Certifications: [List any certifications, courses, or credentials mentioned]
+
+    IMPORTANT: 
+    - For Skills: Look for programming languages (Python, Java, JavaScript, etc.), frameworks (React, Django, etc.), tools (Git, Docker, etc.), databases (MySQL, MongoDB, etc.), and any other technical skills
+    - If any field is not found in the resume, write "Not specified"
+    - Be thorough in extracting skills - look in project descriptions, experience sections, and skills sections
     """
     
     result = call_gemini_api(prompt, max_tokens=1500)
+    
+    if result.startswith("❌"):
+        # Fallback: Try to extract basic info manually
+        return extract_basic_info_manually(limited_text)
     
     # Parse the result into a structured format
     analysis = {}
@@ -250,7 +247,54 @@ def analyze_resume_with_ai(text: str) -> dict:
     for line in lines:
         if ':' in line and not line.startswith('❌'):
             key, value = line.split(':', 1)
-            analysis[key.strip()] = value.strip()
+            key = key.strip()
+            value = value.strip()
+            if key in ['Name', 'Email', 'Phone', 'Skills', 'Education', 'Experience', 'Certifications']:
+                analysis[key] = value
+    
+    # Ensure all required fields exist
+    required_fields = ['Name', 'Email', 'Phone', 'Skills', 'Education', 'Experience', 'Certifications']
+    for field in required_fields:
+        if field not in analysis:
+            analysis[field] = "Not specified"
+    
+    return analysis
+
+def extract_basic_info_manually(text: str) -> dict:
+    """Fallback manual extraction if AI fails"""
+    analysis = {
+        'Name': 'Not specified',
+        'Email': 'Not specified', 
+        'Phone': 'Not specified',
+        'Skills': 'Not specified',
+        'Education': 'Not specified',
+        'Experience': 'Not specified',
+        'Certifications': 'Not specified'
+    }
+    
+    # Extract email
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    emails = re.findall(email_pattern, text)
+    if emails:
+        analysis['Email'] = emails[0]
+    
+    # Extract phone
+    phone_pattern = r'[\+]?[1-9]?[0-9]{7,15}'
+    phones = re.findall(phone_pattern, text)
+    if phones:
+        analysis['Phone'] = phones[0]
+    
+    # Extract common skills
+    common_skills = ['Python', 'Java', 'JavaScript', 'React', 'Node.js', 'SQL', 'HTML', 'CSS', 
+                    'Git', 'Docker', 'AWS', 'Machine Learning', 'Data Analysis', 'Django', 'Flask']
+    found_skills = []
+    text_lower = text.lower()
+    for skill in common_skills:
+        if skill.lower() in text_lower:
+            found_skills.append(skill)
+    
+    if found_skills:
+        analysis['Skills'] = ', '.join(found_skills)
     
     return analysis
 
@@ -296,7 +340,7 @@ def fetch_jobs_from_jsearch(job_role: str, location="India") -> List[dict]:
 def extract_skills_from_jobs(jobs: List[dict]) -> List[str]:
     """Extract required skills from job descriptions using AI"""
     if not jobs:
-        return ["Python", "Communication", "Problem Solving", "Teamwork", "SQL"]  # Default skills
+        return get_default_skills_for_role("Software Developer")
     
     # Combine job descriptions
     job_descriptions = []
@@ -306,14 +350,14 @@ def extract_skills_from_jobs(jobs: List[dict]) -> List[str]:
             job_descriptions.append(desc[:800])  # Limit each description
     
     if not job_descriptions:
-        return ["Python", "Communication", "Problem Solving", "Teamwork", "SQL"]
+        return get_default_skills_for_role("Software Developer")
     
     combined_text = "\n\n".join(job_descriptions)
     
     prompt = f"""
     Analyze these job descriptions and extract the top 15 most important skills required.
     Focus on both technical skills and soft skills.
-    Return only a comma-separated list of skills, nothing else.
+    Return ONLY a comma-separated list of skills, nothing else.
     
     Job Descriptions:
     {combined_text[:3000]}
@@ -324,7 +368,7 @@ def extract_skills_from_jobs(jobs: List[dict]) -> List[str]:
     result = call_gemini_api(prompt, max_tokens=300)
     
     if result.startswith("❌"):
-        return ["Python", "Communication", "Problem Solving", "Teamwork", "SQL"]
+        return get_default_skills_for_role("Software Developer")
     
     # Parse skills from result
     skills = []
@@ -333,7 +377,17 @@ def extract_skills_from_jobs(jobs: List[dict]) -> List[str]:
         if clean_skill and len(clean_skill) < 50:
             skills.append(clean_skill)
     
-    return skills[:15] if skills else ["Python", "Communication", "Problem Solving", "Teamwork", "SQL"]
+    return skills[:15] if skills else get_default_skills_for_role("Software Developer")
+
+def get_default_skills_for_role(role: str) -> List[str]:
+    """Get default skills based on role"""
+    default_skills = {
+        "Software Developer": ["Python", "JavaScript", "React", "Node.js", "SQL", "Git", "HTML", "CSS", "Problem Solving", "Communication", "Teamwork", "Debugging", "Testing", "Agile", "REST APIs"],
+        "Data Scientist": ["Python", "R", "SQL", "Machine Learning", "Statistics", "Pandas", "NumPy", "Matplotlib", "Jupyter", "Data Visualization", "Deep Learning", "TensorFlow", "Scikit-learn", "Communication", "Problem Solving"],
+        "Full Stack Developer": ["JavaScript", "React", "Node.js", "Python", "SQL", "MongoDB", "Express.js", "HTML", "CSS", "Git", "REST APIs", "Authentication", "Deployment", "Testing", "Problem Solving"]
+    }
+    
+    return default_skills.get(role, default_skills["Software Developer"])
 
 # ----------------------- Skill Gap Analysis ----------------------------
 def analyze_skill_gaps(user_skills: List[str], required_skills: List[str]) -> dict:
@@ -392,11 +446,32 @@ def generate_learning_path(missing_skills: List[str]) -> str:
     Keep recommendations practical and actionable.
     """
     
-    return call_gemini_api(prompt, max_tokens=2500)
+    result = call_gemini_api(prompt, max_tokens=2500)
+    
+    if result.startswith("❌"):
+        return generate_fallback_learning_path(missing_skills)
+    
+    return result
+
+def generate_fallback_learning_path(missing_skills: List[str]) -> str:
+    """Fallback learning recommendations if AI fails"""
+    recommendations = "📚 **Learning Recommendations**\n\n"
+    
+    for skill in missing_skills[:5]:
+        recommendations += f"**{skill}:**\n"
+        recommendations += f"📚 Course: Search for '{skill}' on Coursera or Udemy\n"
+        recommendations += f"🆓 Free Resource: YouTube tutorials for '{skill}'\n"
+        recommendations += f"🛠️ Project: Build a small project using {skill}\n"
+        recommendations += f"⏱️ Time: 2-4 weeks\n\n"
+    
+    return recommendations
 
 # ----------------------- Enhanced PDF Report Generator ----------------------------
 def clean_text_for_pdf(text: str) -> str:
     """Clean text to remove problematic characters for PDF generation"""
+    if not text:
+        return ""
+    
     # Replace common Unicode characters that cause encoding issues
     replacements = {
         '\u2022': '•',  # Bullet point
@@ -420,100 +495,105 @@ def clean_text_for_pdf(text: str) -> str:
 
 def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recommendations: str, jobs: List[dict]) -> BytesIO:
     """Generate a comprehensive PDF report"""
-    pdf = FPDF(format='A4')
-    pdf.add_page()
-    
-    # Header
-    pdf.set_font("Arial", "B", 20)
-    pdf.set_text_color(102, 126, 234)  # Blue color
-    pdf.cell(0, 15, "AI Skill Gap Analysis Report", ln=True, align='C')
-    pdf.ln(10)
-    
-    # Personal Information
-    pdf.set_font("Arial", "B", 14)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 10, "Personal Information", ln=True)
-    pdf.set_font("Arial", "", 11)
-    
-    name = analysis.get("Name", "Professional")
-    email = analysis.get("Email", "Not specified")
-    phone = analysis.get("Phone", "Not specified")
-    
-    # Clean text before adding to PDF
-    pdf.cell(0, 8, clean_text_for_pdf(f"Name: {name}"), ln=True)
-    pdf.cell(0, 8, clean_text_for_pdf(f"Email: {email}"), ln=True)
-    pdf.cell(0, 8, clean_text_for_pdf(f"Phone: {phone}"), ln=True)
-    pdf.cell(0, 8, clean_text_for_pdf(f"Target Role: {role}"), ln=True)
-    pdf.ln(5)
-    
-    # Skills Analysis
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "Skills Analysis", ln=True)
-    pdf.set_font("Arial", "", 11)
-    
-    pdf.cell(0, 8, f"Skills Match: {gap_analysis['match_percentage']}%", ln=True)
-    pdf.cell(0, 8, f"Skills You Have: {len(gap_analysis['matched'])}", ln=True)
-    pdf.cell(0, 8, f"Skills to Develop: {len(gap_analysis['missing'])}", ln=True)
-    pdf.ln(5)
-    
-    # Matched Skills
-    if gap_analysis['matched']:
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 8, "Your Matching Skills:", ln=True)
-        pdf.set_font("Arial", "", 10)
-        for skill in gap_analysis['matched'][:15]:
-            pdf.cell(0, 6, clean_text_for_pdf(f"* {skill}"), ln=True)
+    try:
+        pdf = FPDF(format='A4')
+        pdf.add_page()
+        
+        # Header
+        pdf.set_font("Arial", "B", 20)
+        pdf.cell(0, 15, "AI Skill Gap Analysis Report", ln=True, align='C')
+        pdf.ln(10)
+        
+        # Personal Information
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Personal Information", ln=True)
+        pdf.set_font("Arial", "", 11)
+        
+        name = analysis.get("Name", "Professional")
+        email = analysis.get("Email", "Not specified")
+        phone = analysis.get("Phone", "Not specified")
+        
+        # Clean text before adding to PDF
+        pdf.cell(0, 8, clean_text_for_pdf(f"Name: {name}"), ln=True)
+        pdf.cell(0, 8, clean_text_for_pdf(f"Email: {email}"), ln=True)
+        pdf.cell(0, 8, clean_text_for_pdf(f"Phone: {phone}"), ln=True)
+        pdf.cell(0, 8, clean_text_for_pdf(f"Target Role: {role}"), ln=True)
         pdf.ln(5)
-    
-    # Skills to Develop
-    if gap_analysis['missing']:
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 8, "Skills to Develop:", ln=True)
-        pdf.set_font("Arial", "", 10)
-        for skill in gap_analysis['missing'][:15]:
-            pdf.cell(0, 6, clean_text_for_pdf(f"- {skill}"), ln=True)
+        
+        # Skills Analysis
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Skills Analysis", ln=True)
+        pdf.set_font("Arial", "", 11)
+        
+        pdf.cell(0, 8, f"Skills Match: {gap_analysis['match_percentage']}%", ln=True)
+        pdf.cell(0, 8, f"Skills You Have: {len(gap_analysis['matched'])}", ln=True)
+        pdf.cell(0, 8, f"Skills to Develop: {len(gap_analysis['missing'])}", ln=True)
         pdf.ln(5)
-    
-    # Learning Recommendations
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "Learning Recommendations", ln=True)
-    pdf.set_font("Arial", "", 9)
-    
-    # Split recommendations into lines
-    clean_recommendations = clean_text_for_pdf(recommendations)
-    rec_lines = clean_recommendations.split("\n")
-    for line in rec_lines[:50]:  # Limit to prevent overflow
-        if line.strip():
-            try:
-                pdf.multi_cell(0, 5, line.strip())
-            except:
-                pdf.multi_cell(0, 5, "[Content formatting issue]")
-    
-    # Job Opportunities
-    if jobs:
+        
+        # Matched Skills
+        if gap_analysis['matched']:
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 8, "Your Matching Skills:", ln=True)
+            pdf.set_font("Arial", "", 10)
+            for skill in gap_analysis['matched'][:15]:
+                pdf.cell(0, 6, clean_text_for_pdf(f"* {skill}"), ln=True)
+            pdf.ln(5)
+        
+        # Skills to Develop
+        if gap_analysis['missing']:
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 8, "Skills to Develop:", ln=True)
+            pdf.set_font("Arial", "", 10)
+            for skill in gap_analysis['missing'][:15]:
+                pdf.cell(0, 6, clean_text_for_pdf(f"- {skill}"), ln=True)
+            pdf.ln(5)
+        
+        # Learning Recommendations
         pdf.add_page()
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "Current Job Opportunities", ln=True)
-        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 10, "Learning Recommendations", ln=True)
+        pdf.set_font("Arial", "", 9)
         
-        for i, job in enumerate(jobs[:5]):
-            pdf.set_font("Arial", "B", 11)
-            title = job.get('job_title', 'Job Title')[:50]
-            company = job.get('employer_name', 'Company')[:30]
-            pdf.cell(0, 8, clean_text_for_pdf(f"{i+1}. {title} at {company}"), ln=True)
+        # Split recommendations into lines
+        clean_recommendations = clean_text_for_pdf(recommendations)
+        rec_lines = clean_recommendations.split("\n")
+        for line in rec_lines[:50]:  # Limit to prevent overflow
+            if line.strip():
+                try:
+                    pdf.multi_cell(0, 5, line.strip())
+                except:
+                    pdf.multi_cell(0, 5, "[Content formatting issue]")
+        
+        # Job Opportunities
+        if jobs:
+            pdf.add_page()
+            pdf.set_font("Arial", "B", 14)
+            pdf.cell(0, 10, "Current Job Opportunities", ln=True)
+            pdf.set_font("Arial", "", 10)
             
-            pdf.set_font("Arial", "", 9)
-            location = f"{job.get('job_city', 'N/A')}, {job.get('job_state', 'N/A')}"
-            pdf.cell(0, 6, clean_text_for_pdf(f"Location: {location}"), ln=True)
-            pdf.cell(0, 6, clean_text_for_pdf(f"Type: {job.get('job_employment_type', 'N/A')}"), ln=True)
-            pdf.ln(3)
+            for i, job in enumerate(jobs[:5]):
+                pdf.set_font("Arial", "B", 11)
+                title = job.get('job_title', 'Job Title')[:50]
+                company = job.get('employer_name', 'Company')[:30]
+                pdf.cell(0, 8, clean_text_for_pdf(f"{i+1}. {title} at {company}"), ln=True)
+                
+                pdf.set_font("Arial", "", 9)
+                location = f"{job.get('job_city', 'N/A')}, {job.get('job_state', 'N/A')}"
+                pdf.cell(0, 6, clean_text_for_pdf(f"Location: {location}"), ln=True)
+                pdf.cell(0, 6, clean_text_for_pdf(f"Type: {job.get('job_employment_type', 'N/A')}"), ln=True)
+                pdf.ln(3)
+        
+        # Generate PDF
+        buffer = BytesIO()
+        pdf.output(buffer)
+        buffer.seek(0)
+        return buffer
     
-    # Generate PDF
-    buffer = BytesIO()
-    pdf.output(buffer)
-    buffer.seek(0)
-    return buffer
+    except Exception as e:
+        st.error(f"PDF generation error: {str(e)}")
+        # Return empty buffer
+        buffer = BytesIO()
+        return buffer
 
 # ----------------------- Enhanced Sidebar ----------------------------
 with st.sidebar:
@@ -750,7 +830,7 @@ if uploaded_file:
                             
                             posted_date = job.get('job_posted_at_datetime_utc', 'N/A')
                             if posted_date and posted_date != 'N/A' and len(str(posted_date)) >= 10:
-                                st.write(f"**📅 Posted:** {posted_date[:10]}")
+                                st.write(f"**📅 Posted:** {str(posted_date)[:10]}")
                             else:
                                 st.write(f"**📅 Posted:** Not specified")
             else:
@@ -769,16 +849,19 @@ if uploaded_file:
                                 analysis, selected_role, gap_analysis, recommendations, jobs
                             )
                             
-                            st.success("✅ Report generated successfully!")
-                            
-                            # Download button
-                            st.download_button(
-                                label="⬇️ Download PDF Report",
-                                data=report_buffer,
-                                file_name=f"Skill_Gap_Analysis_{selected_role.replace(' ', '_')}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True
-                            )
+                            if report_buffer.getvalue():  # Check if buffer has content
+                                st.success("✅ Report generated successfully!")
+                                
+                                # Download button
+                                st.download_button(
+                                    label="⬇️ Download PDF Report",
+                                    data=report_buffer,
+                                    file_name=f"Skill_Gap_Analysis_{selected_role.replace(' ', '_')}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True
+                                )
+                            else:
+                                st.error("❌ Error generating report. Please try again.")
                         except Exception as e:
                             st.error(f"❌ Error generating report: {str(e)}")
             
