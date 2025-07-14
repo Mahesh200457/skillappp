@@ -9,10 +9,10 @@ from fpdf import FPDF
 from typing import List
 from io import BytesIO
 
-# API keys will be loaded from Streamlit secrets in deployment
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-JSEARCH_API_KEY = st.secrets["JSEARCH_API_KEY"]
-JSEARCH_HOST = st.secrets["JSEARCH_HOST"]
+# ❗️ Manually setting your API keys (temporary)
+openai.api_key = "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"
+JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
+JSEARCH_HOST = "jsearch.p.rapidapi.com"
 
 st.set_page_config(page_title="AI Skill Gap Analyzer", layout="wide")
 st.title("🧠 AI-Based Skill Gap Analyzer Platform")
