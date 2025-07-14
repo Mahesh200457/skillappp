@@ -9,24 +9,13 @@ from typing import List
 from io import BytesIO
 import os
 
-# Secure API key management
-def get_api_keys():
-    """Get API keys from environment variables or Streamlit secrets"""
-    try:
-        # Try to get from Streamlit secrets first
-        gemini_key = st.secrets.get("GEMINI_API_KEY")
-        jsearch_key = st.secrets.get("JSEARCH_API_KEY")
-    except:
-        # Fall back to environment variables
-        gemini_key = os.getenv("GEMINI_API_KEY")
-        jsearch_key = os.getenv("JSEARCH_API_KEY")
-    
-    return gemini_key, jsearch_key
-
-# Get API keys
-GEMINI_API_KEY, JSEARCH_API_KEY = get_api_keys()
+# ✅ Manually set your API keys directly
+GEMINI_API_KEY = "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"
+JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
+
+
 
 def call_gemini_api(prompt: str, max_tokens: int = 1000) -> str:
     """Call Gemini API with the given prompt"""
