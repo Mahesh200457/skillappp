@@ -11,6 +11,7 @@ from io import BytesIO
 import os
 import time
 import re
+import random
 
 # ✅ Updated Gemini API credentials
 GEMINI_API_KEY = "AIzaSyB-aZF6eOVKgE8TLD_ZCYm_lS6AIzw_1Yw"
@@ -132,42 +133,136 @@ def call_gemini_api(prompt: str, max_tokens: int = 2000) -> str:
     if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_API_KEY_HERE":
         return "❌ Please configure a valid Gemini API key."
     
-    headers = {'Content-Type': 'application/json'}
+    # Retry logic for overloaded servers
+    max_retries = 3
+    base_delay = 2
     
-    data = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.3,
-            "topK": 40,
-            "topP": 0.95,
-            "maxOutputTokens": max_tokens,
-        }
-    }
-
-    try:
-        with st.spinner("🤖 AI is processing your request..."):
-            response = requests.post(
-                f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-                headers=headers,
-                json=data,
-                timeout=30
-            )
+    for attempt in range(max_retries):
+        headers = {'Content-Type': 'application/json'}
         
-        if response.status_code == 200:
-            result = response.json()
-            if 'candidates' in result and len(result['candidates']) > 0:
-                if 'content' in result['candidates'][0]:
-                    return result['candidates'][0]['content']['parts'][0]['text']
+        data = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "topK": 40,
+                "topP": 0.95,
+                "maxOutputTokens": max_tokens,
+            }
+        }
+
+        try:
+            retry_msg = f" (Attempt {attempt + 1}/{max_retries})" if attempt > 0 else ""
+            with st.spinner(f"🤖 AI is processing your request{retry_msg}..."):
+                response = requests.post(
+                    f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
+                    headers=headers,
+                    json=data,
+                    timeout=30
+                )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if 'candidates' in result and len(result['candidates']) > 0:
+                    if 'content' in result['candidates'][0]:
+                        return result['candidates'][0]['content']['parts'][0]['text']
+                    else:
+                        st.error("🚨 API response format error. Content not found in response.")
+                        return "❌ API response format error"
                 else:
-                    st.error("🚨 API response format error. Content not found in response.")
-                    return "❌ API response format error"
+                    st.error("🚨 No candidates in API response. The request may have been blocked.")
+                    return "❌ No valid response from AI"
+            elif response.status_code == 503:
+                # Server overloaded - retry with exponential backoff
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                    st.warning(f"⏳ Server is busy. Retrying in {delay:.1f} seconds...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    st.error("🚨 Gemini servers are overloaded. Using fallback analysis...")
+                    return "❌ Server overloaded - using fallback"
             else:
-                st.error("🚨 No candidates in API response. The request may have been blocked.")
-                return "❌ No valid response from AI"
-        else:
-            st.error(f"🚨 API Error (Status: {response.status_code})")
-            st.error(f"Response: {response.text[:500]}")
-            return f"❌ API Error (Status: {response.status_code})"
+                st.error(f"🚨 API Error (Status: {response.status_code})")
+                st.error(f"Response: {response.text[:500]}")
+                return f"❌ API Error (Status: {response.status_code})"
+                
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                st.warning("⏰ Request timeout. Retrying...")
+                time.sleep(base_delay)
+                continue
+            else:
+                st.error("⏰ Request timeout. Please try again.")
+                return "❌ Request timeout. Please try again."
+        except requests.exceptions.ConnectionError:
+            st.error("🌐 Connection error. Please check your internet connection.")
+            return "❌ Connection error. Please check your internet connection."
+        except Exception as e:
+            st.error(f"🔧 Unexpected error: {str(e)}")
+            return f"❌ Unexpected error: {str(e)}"
+    
+    return "❌ All retry attempts failed"
+
+def analyze_resume_with_ai(text: str) -> dict:
+    """Enhanced resume analysis with structured output and fallback"""
+    
+    # Limit text to prevent token overflow
+    limited_text = text[:8000] if len(text) > 8000 else text
+    
+    prompt = f"""
+    Analyze this resume text and extract the following information. Be very thorough and look for all details:
+
+    RESUME TEXT:
+    {limited_text}
+
+    Please extract and format the response EXACTLY like this:
+
+    Name: [Extract the person's full name]
+    Email: [Extract email address]
+    Phone: [Extract phone number]
+    Skills: [List ALL technical skills, programming languages, tools, frameworks, technologies mentioned - separate with commas]
+    Education: [Extract educational qualifications, degrees, institutions]
+    Experience: [Summarize work experience and roles]
+    Certifications: [List any certifications, courses, or credentials mentioned]
+
+    IMPORTANT: 
+    - For Skills: Look for programming languages (Python, Java, JavaScript, etc.), frameworks (React, Django, etc.), tools (Git, Docker, etc.), databases (MySQL, MongoDB, etc.), and any other technical skills
+    - If any field is not found in the resume, write "Not specified"
+    - Be thorough in extracting skills - look in project descriptions, experience sections, and skills sections
+    """
+    
+    result = call_gemini_api(prompt, max_tokens=1500)
+    
+    # If API failed due to overload or other issues, use manual extraction
+    if result.startswith("❌"):
+        st.info("🔄 Using manual analysis due to AI server issues...")
+        return extract_basic_info_manually(limited_text)
+    
+    # Parse the result into a structured format
+    analysis = {}
+    lines = result.split('\n')
+    
+    for line in lines:
+        if ':' in line and not line.startswith('❌'):
+            key, value = line.split(':', 1)
+            key = key.strip()
+            value = value.strip()
+            if key in ['Name', 'Email', 'Phone', 'Skills', 'Education', 'Experience', 'Certifications']:
+                analysis[key] = value
+    
+    # Ensure all required fields exist
+    required_fields = ['Name', 'Email', 'Phone', 'Skills', 'Education', 'Experience', 'Certifications']
+    for field in required_fields:
+        if field not in analysis:
+            analysis[field] = "Not specified"
+    
+    # If AI didn't extract skills properly, try manual extraction
+    if analysis.get('Skills') == 'Not specified' or not analysis.get('Skills'):
+        manual_analysis = extract_basic_info_manually(limited_text)
+        if manual_analysis.get('Skills') != 'Not specified':
+            analysis['Skills'] = manual_analysis['Skills']
+    
+    return analysis
             
     except requests.exceptions.Timeout:
         st.error("⏰ Request timeout. Please try again.")
