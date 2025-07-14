@@ -10,8 +10,9 @@ from io import BytesIO
 import os
 
 # ✅ Gemini and JSearch API credentials
-GEMINI_API_KEY = "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"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
+GEMINI_API_KEY = "AIzaSyBSG3_c6wAW4q4XkF9PjYKmpd33NxV7GZ4"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
+
 
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
