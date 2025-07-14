@@ -42,34 +42,7 @@ st.title("🧠 AI-Based Skill Gap Analyzer Platform")
 st.markdown("Upload your resume to find skill gaps, personalized learning resources, and real-time job matches in India.")
 
 # Check if API keys are configured
-if not OPENAI_API_KEY:
-    st.error("⚠️ OpenAI API key is not configured. Please set up your API key in Streamlit secrets or environment variables.")
-    st.markdown("""
-    ### How to set up API keys:
-    
-    **Option 1: Streamlit Secrets (Recommended for deployment)**
-    1. Create a `.streamlit/secrets.toml` file in your project directory
-    2. Add your keys:
-    ```toml
-    OPENAI_API_KEY = "your-openai-api-key-here"
-    JSEARCH_API_KEY = "your-jsearch-api-key-here"
-    ```
-    
-    **Option 2: Environment Variables**
-    1. Set environment variables:
-    ```bash
-    export OPENAI_API_KEY="your-openai-api-key-here"
-    export JSEARCH_API_KEY="your-jsearch-api-key-here"
-    ```
-    
-    **Get your API keys:**
-    - OpenAI: https://platform.openai.com/api-keys
-    - JSearch: https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
-    """)
-    st.stop()
 
-if not JSEARCH_API_KEY:
-    st.warning("⚠️ JSearch API key is not configured. Job search functionality will be limited.")
 
 uploaded_file = st.file_uploader("Upload your PDF Resume", type=["pdf"])
 
