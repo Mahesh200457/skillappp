@@ -11,7 +11,7 @@ from typing import List
 from io import BytesIO
 
 # ❗️ Manually setting your API keys (temporary)
-openai.api_key = "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"
+openai.api_key = "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"
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
 
