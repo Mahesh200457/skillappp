@@ -13,7 +13,7 @@ import time
 
 # ✅ Updated Gemini API credentials
 GEMINI_API_KEY = "AIzaSyB-aZF6eOVKgE8TLD_ZCYm_lS6AIzw_1Yw"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
 
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
@@ -163,18 +163,26 @@ def call_gemini_api(prompt: str, max_tokens: int = 1000) -> str:
             if 'candidates' in result and len(result['candidates']) > 0:
                 if 'content' in result['candidates'][0]:
                     return result['candidates'][0]['content']['parts'][0]['text']
+                else:
+                    st.error("🚨 API response format error. Content not found in response.")
+                    return "❌ API response format error"
+            else:
+                st.error("🚨 No candidates in API response. The request may have been blocked.")
+                return "❌ No valid response from AI"
         
         # Handle different error codes with user-friendly messages
         error_messages = {
             400: "Invalid request format. Please try again.",
             401: "API key authentication failed. Please check your API key.",
             403: "API access forbidden. Your API key might be invalid or quota exceeded.",
+            404: "API endpoint not found. The service might be temporarily unavailable.",
             429: "Rate limit exceeded. Please wait a moment and try again.",
             500: "Google AI service temporarily unavailable. Please try again later."
         }
         
         error_msg = error_messages.get(response.status_code, f"API error (Status: {response.status_code})")
         st.error(f"🚨 {error_msg}")
+        st.error(f"Response: {response.text[:500]}")  # Show first 500 chars of error response
         return f"❌ {error_msg}"
             
     except requests.exceptions.Timeout:
@@ -387,9 +395,32 @@ def generate_learning_path(missing_skills: List[str]) -> str:
     return call_gemini_api(prompt, max_tokens=2500)
 
 # ----------------------- Enhanced PDF Report Generator ----------------------------
+def clean_text_for_pdf(text: str) -> str:
+    """Clean text to remove problematic characters for PDF generation"""
+    # Replace common Unicode characters that cause encoding issues
+    replacements = {
+        '\u2022': '•',  # Bullet point
+        '\u2013': '-',  # En dash
+        '\u2014': '--', # Em dash
+        '\u2018': "'",  # Left single quote
+        '\u2019': "'",  # Right single quote
+        '\u201c': '"',  # Left double quote
+        '\u201d': '"',  # Right double quote
+        '\u2026': '...',# Ellipsis
+        '\u00a0': ' ',  # Non-breaking space
+    }
+    
+    for unicode_char, replacement in replacements.items():
+        text = text.replace(unicode_char, replacement)
+    
+    # Remove any remaining non-ASCII characters
+    text = ''.join(char if ord(char) < 128 else '?' for char in text)
+    
+    return text
+
 def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recommendations: str, jobs: List[dict]) -> BytesIO:
     """Generate a comprehensive PDF report"""
-    pdf = FPDF()
+    pdf = FPDF(format='A4')
     pdf.add_page()
     
     # Header
@@ -408,10 +439,11 @@ def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recomm
     email = analysis.get("Email", "Not specified")
     phone = analysis.get("Phone", "Not specified")
     
-    pdf.cell(0, 8, f"Name: {name}", ln=True)
-    pdf.cell(0, 8, f"Email: {email}", ln=True)
-    pdf.cell(0, 8, f"Phone: {phone}", ln=True)
-    pdf.cell(0, 8, f"Target Role: {role}", ln=True)
+    # Clean text before adding to PDF
+    pdf.cell(0, 8, clean_text_for_pdf(f"Name: {name}"), ln=True)
+    pdf.cell(0, 8, clean_text_for_pdf(f"Email: {email}"), ln=True)
+    pdf.cell(0, 8, clean_text_for_pdf(f"Phone: {phone}"), ln=True)
+    pdf.cell(0, 8, clean_text_for_pdf(f"Target Role: {role}"), ln=True)
     pdf.ln(5)
     
     # Skills Analysis
@@ -430,7 +462,7 @@ def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recomm
         pdf.cell(0, 8, "Your Matching Skills:", ln=True)
         pdf.set_font("Arial", "", 10)
         for skill in gap_analysis['matched'][:15]:
-            pdf.cell(0, 6, f"✓ {skill}", ln=True)
+            pdf.cell(0, 6, clean_text_for_pdf(f"* {skill}"), ln=True)
         pdf.ln(5)
     
     # Skills to Develop
@@ -439,7 +471,7 @@ def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recomm
         pdf.cell(0, 8, "Skills to Develop:", ln=True)
         pdf.set_font("Arial", "", 10)
         for skill in gap_analysis['missing'][:15]:
-            pdf.cell(0, 6, f"• {skill}", ln=True)
+            pdf.cell(0, 6, clean_text_for_pdf(f"- {skill}"), ln=True)
         pdf.ln(5)
     
     # Learning Recommendations
@@ -449,15 +481,14 @@ def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recomm
     pdf.set_font("Arial", "", 9)
     
     # Split recommendations into lines
-    rec_lines = recommendations.split("\n")
+    clean_recommendations = clean_text_for_pdf(recommendations)
+    rec_lines = clean_recommendations.split("\n")
     for line in rec_lines[:50]:  # Limit to prevent overflow
         if line.strip():
             try:
-                # Handle encoding issues
-                clean_line = line.encode('latin-1', 'replace').decode('latin-1')
-                pdf.multi_cell(0, 5, clean_line)
+                pdf.multi_cell(0, 5, line.strip())
             except:
-                pdf.multi_cell(0, 5, "Content encoding issue")
+                pdf.multi_cell(0, 5, "[Content formatting issue]")
     
     # Job Opportunities
     if jobs:
@@ -470,12 +501,12 @@ def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recomm
             pdf.set_font("Arial", "B", 11)
             title = job.get('job_title', 'Job Title')[:50]
             company = job.get('employer_name', 'Company')[:30]
-            pdf.cell(0, 8, f"{i+1}. {title} at {company}", ln=True)
+            pdf.cell(0, 8, clean_text_for_pdf(f"{i+1}. {title} at {company}"), ln=True)
             
             pdf.set_font("Arial", "", 9)
             location = f"{job.get('job_city', 'N/A')}, {job.get('job_state', 'N/A')}"
-            pdf.cell(0, 6, f"Location: {location}", ln=True)
-            pdf.cell(0, 6, f"Type: {job.get('job_employment_type', 'N/A')}", ln=True)
+            pdf.cell(0, 6, clean_text_for_pdf(f"Location: {location}"), ln=True)
+            pdf.cell(0, 6, clean_text_for_pdf(f"Type: {job.get('job_employment_type', 'N/A')}"), ln=True)
             pdf.ln(3)
     
     # Generate PDF
