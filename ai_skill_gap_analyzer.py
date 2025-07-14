@@ -1,218 +1,484 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-import requests
-import json
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from fpdf import FPDF
-from typing import List
+from typing import List, Dict
 from io import BytesIO
-import os
-import time
 import re
-import random
+import json
+from datetime import datetime
 
-# ✅ Updated Gemini API credentials
-GEMINI_API_KEY = "AIzaSyB-aZF6eOVKgE8TLD_ZCYm_lS6AIzw_1Yw"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
-
-JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
-JSEARCH_HOST = "jsearch.p.rapidapi.com"
-
-# 🎨 Enhanced Streamlit page configuration
+# 🎓 FREE VERSION FOR STUDENTS - NO API REQUIRED!
 st.set_page_config(
-    page_title="AI Skill Gap Analyzer", 
-    page_icon="🧠", 
+    page_title="Free Student Skill Gap Analyzer", 
+    page_icon="🎓", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 🎨 Custom CSS for better design
+# 🎨 Neumorphism Design CSS
 st.markdown("""
 <style>
-    .main-header {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+    
+    * {
+        font-family: 'Poppins', sans-serif;
     }
     
-    .metric-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        border-left: 4px solid #667eea;
-        margin: 1rem 0;
+    .main {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+    }
+    
+    .stApp {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    }
+    
+    .main-header {
+        background: linear-gradient(145deg, #ffffff, #e6e6e6);
+        padding: 2.5rem;
+        border-radius: 25px;
+        color: #333;
+        text-align: center;
+        margin-bottom: 2rem;
+        box-shadow: 
+            20px 20px 60px #bebebe,
+            -20px -20px 60px #ffffff;
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .main-header h1 {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 700;
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .neumorphic-card {
+        background: linear-gradient(145deg, #ffffff, #f0f0f0);
+        padding: 2rem;
+        border-radius: 20px;
+        margin: 1.5rem 0;
+        box-shadow: 
+            15px 15px 30px #d1d1d1,
+            -15px -15px 30px #ffffff;
+        border: 1px solid rgba(255,255,255,0.3);
+        transition: all 0.3s ease;
+    }
+    
+    .neumorphic-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 
+            20px 20px 40px #d1d1d1,
+            -20px -20px 40px #ffffff;
     }
     
     .skill-badge {
         display: inline-block;
-        background: #e8f4fd;
-        color: #1f77b4;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        margin: 0.2rem;
+        background: linear-gradient(145deg, #667eea, #764ba2);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        margin: 0.3rem;
         font-size: 0.9rem;
-        border: 1px solid #1f77b4;
+        font-weight: 500;
+        box-shadow: 
+            5px 5px 10px #bebebe,
+            -5px -5px 10px #ffffff;
+        transition: all 0.3s ease;
+    }
+    
+    .skill-badge:hover {
+        transform: scale(1.05);
+        box-shadow: 
+            8px 8px 15px #bebebe,
+            -8px -8px 15px #ffffff;
     }
     
     .missing-skill-badge {
         display: inline-block;
-        background: #fff2f2;
-        color: #d63384;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        margin: 0.2rem;
+        background: linear-gradient(145deg, #ff6b6b, #ee5a52);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        margin: 0.3rem;
         font-size: 0.9rem;
-        border: 1px solid #d63384;
+        font-weight: 500;
+        box-shadow: 
+            5px 5px 10px #bebebe,
+            -5px -5px 10px #ffffff;
+        transition: all 0.3s ease;
+    }
+    
+    .missing-skill-badge:hover {
+        transform: scale(1.05);
+        box-shadow: 
+            8px 8px 15px #bebebe,
+            -8px -8px 15px #ffffff;
     }
     
     .success-box {
-        background: #d4edda;
-        border: 1px solid #c3e6cb;
-        color: #155724;
-        padding: 1rem;
-        border-radius: 8px;
+        background: linear-gradient(145deg, #51cf66, #40c057);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 15px;
         margin: 1rem 0;
+        box-shadow: 
+            10px 10px 20px #bebebe,
+            -10px -10px 20px #ffffff;
+        font-weight: 500;
     }
     
     .warning-box {
-        background: #fff3cd;
-        border: 1px solid #ffeaa7;
-        color: #856404;
-        padding: 1rem;
-        border-radius: 8px;
+        background: linear-gradient(145deg, #ffd43b, #fab005);
+        color: #333;
+        padding: 1.5rem;
+        border-radius: 15px;
         margin: 1rem 0;
+        box-shadow: 
+            10px 10px 20px #bebebe,
+            -10px -10px 20px #ffffff;
+        font-weight: 500;
     }
     
     .info-box {
-        background: #d1ecf1;
-        border: 1px solid #bee5eb;
-        color: #0c5460;
-        padding: 1rem;
-        border-radius: 8px;
+        background: linear-gradient(145deg, #74c0fc, #339af0);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 15px;
         margin: 1rem 0;
+        box-shadow: 
+            10px 10px 20px #bebebe,
+            -10px -10px 20px #ffffff;
+        font-weight: 500;
     }
     
-    .job-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        margin: 1rem 0;
-        border-left: 4px solid #28a745;
+    .metric-card {
+        background: linear-gradient(145deg, #ffffff, #f8f9fa);
+        padding: 2rem;
+        border-radius: 20px;
+        text-align: center;
+        box-shadow: 
+            15px 15px 30px #d1d1d1,
+            -15px -15px 30px #ffffff;
+        border: 1px solid rgba(255,255,255,0.3);
+        transition: all 0.3s ease;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 
+            18px 18px 35px #d1d1d1,
+            -18px -18px 35px #ffffff;
     }
     
     .sidebar-info {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #17a2b8;
+        background: linear-gradient(145deg, #ffffff, #f0f0f0);
+        padding: 1.5rem;
+        border-radius: 15px;
         margin: 1rem 0;
+        box-shadow: 
+            10px 10px 20px #d1d1d1,
+            -10px -10px 20px #ffffff;
+        border-left: 4px solid #667eea;
+    }
+    
+    .job-card {
+        background: linear-gradient(145deg, #ffffff, #f8f9fa);
+        padding: 2rem;
+        border-radius: 20px;
+        margin: 1rem 0;
+        box-shadow: 
+            15px 15px 30px #d1d1d1,
+            -15px -15px 30px #ffffff;
+        border-left: 5px solid #51cf66;
+        transition: all 0.3s ease;
+    }
+    
+    .job-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 
+            20px 20px 40px #d1d1d1,
+            -20px -20px 40px #ffffff;
+    }
+    
+    .stButton > button {
+        background: linear-gradient(145deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        border-radius: 15px;
+        padding: 0.8rem 2rem;
+        font-weight: 600;
+        box-shadow: 
+            8px 8px 16px #bebebe,
+            -8px -8px 16px #ffffff;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 
+            12px 12px 24px #bebebe,
+            -12px -12px 24px #ffffff;
+    }
+    
+    .stSelectbox > div > div {
+        background: linear-gradient(145deg, #ffffff, #f0f0f0);
+        border-radius: 15px;
+        box-shadow: 
+            inset 5px 5px 10px #d1d1d1,
+            inset -5px -5px 10px #ffffff;
+    }
+    
+    .student-badge {
+        background: linear-gradient(45deg, #ff6b6b, #ffd93d);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 600;
+        display: inline-block;
+        margin: 0.5rem 0;
+        box-shadow: 
+            5px 5px 10px #bebebe,
+            -5px -5px 10px #ffffff;
+    }
+    
+    .free-badge {
+        background: linear-gradient(45deg, #51cf66, #40c057);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-left: 1rem;
+        box-shadow: 
+            3px 3px 6px #bebebe,
+            -3px -3px 6px #ffffff;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 🎨 Main header with gradient background
+# 🎨 Main header with neumorphism design
 st.markdown("""
 <div class="main-header">
-    <h1>🧠 AI-Powered Skill Gap Analyzer</h1>
-    <p>Transform your career with AI-driven insights • Find skill gaps • Get personalized learning paths • Discover job opportunities</p>
+    <h1>🎓 Free Student Skill Gap Analyzer</h1>
+    <div class="student-badge">100% Free for Students</div>
+    <div class="free-badge">No API Required</div>
+    <p style="margin-top: 1rem; font-size: 1.1rem; color: #666;">
+        Transform your career with AI-free insights • Find skill gaps • Get personalized learning paths • Discover opportunities
+    </p>
 </div>
 """, unsafe_allow_html=True)
 
-# ----------------------- Enhanced API Call Function ----------------------------
-def call_gemini_api(prompt: str, max_tokens: int = 2000) -> str:
-    """Enhanced Gemini API call with better error handling"""
-    
-    if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_API_KEY_HERE":
-        return "❌ Please configure a valid Gemini API key."
-    
-    # Retry logic for overloaded servers
-    max_retries = 3
-    base_delay = 2
-    
-    for attempt in range(max_retries):
-        headers = {'Content-Type': 'application/json'}
-        
-        data = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.3,
-                "topK": 40,
-                "topP": 0.95,
-                "maxOutputTokens": max_tokens,
-            }
+# ----------------------- Built-in Knowledge Base (No API Required) ----------------------------
+SKILL_DATABASE = {
+    "programming_languages": [
+        "Python", "Java", "JavaScript", "C++", "C#", "PHP", "Ruby", "Go", "Rust", "Swift",
+        "Kotlin", "TypeScript", "Scala", "R", "MATLAB", "Perl", "Dart", "Objective-C"
+    ],
+    "web_technologies": [
+        "HTML", "CSS", "React", "Angular", "Vue.js", "Node.js", "Express.js", "Django",
+        "Flask", "Spring Boot", "Laravel", "Ruby on Rails", "ASP.NET", "jQuery", "Bootstrap",
+        "Tailwind CSS", "SASS", "LESS", "Webpack", "Vite"
+    ],
+    "databases": [
+        "MySQL", "PostgreSQL", "MongoDB", "SQLite", "Redis", "Oracle", "SQL Server",
+        "Cassandra", "DynamoDB", "Firebase", "Elasticsearch", "Neo4j"
+    ],
+    "cloud_devops": [
+        "AWS", "Azure", "Google Cloud", "Docker", "Kubernetes", "Jenkins", "Git", "GitHub",
+        "GitLab", "CI/CD", "Terraform", "Ansible", "Linux", "Bash", "PowerShell"
+    ],
+    "data_science": [
+        "Machine Learning", "Deep Learning", "Data Analysis", "Statistics", "Pandas",
+        "NumPy", "Matplotlib", "Seaborn", "Scikit-learn", "TensorFlow", "PyTorch",
+        "Jupyter", "Tableau", "Power BI", "Excel", "SQL", "Big Data", "Hadoop", "Spark"
+    ],
+    "mobile_development": [
+        "Android", "iOS", "React Native", "Flutter", "Xamarin", "Ionic", "Swift",
+        "Kotlin", "Java", "Objective-C", "Dart"
+    ],
+    "soft_skills": [
+        "Communication", "Leadership", "Teamwork", "Problem Solving", "Critical Thinking",
+        "Time Management", "Project Management", "Agile", "Scrum", "Presentation Skills",
+        "Analytical Thinking", "Creativity", "Adaptability", "Collaboration"
+    ]
+}
+
+JOB_REQUIREMENTS = {
+    "Software Developer": {
+        "technical": ["Python", "JavaScript", "React", "Node.js", "SQL", "Git", "HTML", "CSS", "REST APIs", "Testing"],
+        "soft": ["Problem Solving", "Communication", "Teamwork", "Debugging", "Agile"]
+    },
+    "Full Stack Developer": {
+        "technical": ["JavaScript", "React", "Node.js", "Python", "SQL", "MongoDB", "Express.js", "HTML", "CSS", "Git", "REST APIs"],
+        "soft": ["Problem Solving", "Communication", "Project Management", "Time Management", "Adaptability"]
+    },
+    "Frontend Developer": {
+        "technical": ["JavaScript", "React", "HTML", "CSS", "TypeScript", "Vue.js", "Angular", "Webpack", "SASS", "Bootstrap"],
+        "soft": ["Creativity", "Attention to Detail", "Communication", "Problem Solving", "Collaboration"]
+    },
+    "Backend Developer": {
+        "technical": ["Python", "Java", "Node.js", "SQL", "MongoDB", "REST APIs", "Docker", "AWS", "Git", "Linux"],
+        "soft": ["Problem Solving", "Analytical Thinking", "Communication", "Teamwork", "Critical Thinking"]
+    },
+    "Data Scientist": {
+        "technical": ["Python", "R", "SQL", "Machine Learning", "Statistics", "Pandas", "NumPy", "Matplotlib", "Jupyter", "TensorFlow"],
+        "soft": ["Analytical Thinking", "Problem Solving", "Communication", "Critical Thinking", "Presentation Skills"]
+    },
+    "Data Analyst": {
+        "technical": ["SQL", "Python", "Excel", "Tableau", "Power BI", "Statistics", "Data Analysis", "Pandas", "R"],
+        "soft": ["Analytical Thinking", "Communication", "Attention to Detail", "Problem Solving", "Critical Thinking"]
+    },
+    "Mobile App Developer": {
+        "technical": ["Java", "Kotlin", "Swift", "React Native", "Flutter", "Android", "iOS", "Git", "REST APIs"],
+        "soft": ["Problem Solving", "Creativity", "Communication", "Teamwork", "Adaptability"]
+    },
+    "DevOps Engineer": {
+        "technical": ["Docker", "Kubernetes", "AWS", "Jenkins", "Git", "Linux", "Bash", "CI/CD", "Terraform", "Ansible"],
+        "soft": ["Problem Solving", "Communication", "Teamwork", "Critical Thinking", "Time Management"]
+    },
+    "UI/UX Designer": {
+        "technical": ["Figma", "Adobe XD", "Sketch", "Photoshop", "Illustrator", "HTML", "CSS", "JavaScript", "Prototyping"],
+        "soft": ["Creativity", "Communication", "Empathy", "Problem Solving", "Attention to Detail"]
+    },
+    "Cybersecurity Analyst": {
+        "technical": ["Network Security", "Penetration Testing", "Linux", "Python", "Wireshark", "Nmap", "Metasploit", "SIEM"],
+        "soft": ["Analytical Thinking", "Problem Solving", "Attention to Detail", "Communication", "Critical Thinking"]
+    }
+}
+
+SAMPLE_JOBS = {
+    "Software Developer": [
+        {
+            "title": "Junior Software Developer",
+            "company": "TechStart Solutions",
+            "location": "Bangalore, India",
+            "type": "Full-time",
+            "salary": "₹4-6 LPA",
+            "description": "Join our dynamic team to build innovative software solutions using modern technologies.",
+            "posted": "2024-01-15"
+        },
+        {
+            "title": "Python Developer",
+            "company": "DataFlow Systems",
+            "location": "Hyderabad, India",
+            "type": "Full-time",
+            "salary": "₹5-8 LPA",
+            "description": "Develop scalable applications using Python, Django, and modern web technologies.",
+            "posted": "2024-01-14"
+        },
+        {
+            "title": "Software Engineer Trainee",
+            "company": "InnovateTech",
+            "location": "Pune, India",
+            "type": "Full-time",
+            "salary": "₹3.5-5 LPA",
+            "description": "Perfect opportunity for fresh graduates to start their software development career.",
+            "posted": "2024-01-13"
         }
+    ],
+    "Data Scientist": [
+        {
+            "title": "Junior Data Scientist",
+            "company": "Analytics Pro",
+            "location": "Mumbai, India",
+            "type": "Full-time",
+            "salary": "₹6-9 LPA",
+            "description": "Work with big data to extract insights and build predictive models.",
+            "posted": "2024-01-15"
+        },
+        {
+            "title": "Data Analyst",
+            "company": "Business Intelligence Corp",
+            "location": "Chennai, India",
+            "type": "Full-time",
+            "salary": "₹4-7 LPA",
+            "description": "Analyze business data and create meaningful reports and dashboards.",
+            "posted": "2024-01-14"
+        }
+    ],
+    "Frontend Developer": [
+        {
+            "title": "React Developer",
+            "company": "WebCraft Studios",
+            "location": "Bangalore, India",
+            "type": "Full-time",
+            "salary": "₹5-8 LPA",
+            "description": "Build responsive and interactive user interfaces using React and modern CSS.",
+            "posted": "2024-01-15"
+        },
+        {
+            "title": "UI Developer",
+            "company": "DesignTech Solutions",
+            "location": "Gurgaon, India",
+            "type": "Full-time",
+            "salary": "₹4-6 LPA",
+            "description": "Create beautiful and functional user interfaces for web applications.",
+            "posted": "2024-01-14"
+        }
+    ]
+}
 
-        try:
-            retry_msg = f" (Attempt {attempt + 1}/{max_retries})" if attempt > 0 else ""
-            with st.spinner(f"🤖 AI is processing your request{retry_msg}..."):
-                response = requests.post(
-                    f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-                    headers=headers,
-                    json=data,
-                    timeout=30
-                )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'candidates' in result and len(result['candidates']) > 0:
-                    if 'content' in result['candidates'][0]:
-                        return result['candidates'][0]['content']['parts'][0]['text']
-                    else:
-                        st.error("🚨 API response format error. Content not found in response.")
-                        return "❌ API response format error"
-                else:
-                    st.error("🚨 No candidates in API response. The request may have been blocked.")
-                    return "❌ No valid response from AI"
-            elif response.status_code == 503:
-                # Server overloaded - retry with exponential backoff
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                    st.warning(f"⏳ Server is busy. Retrying in {delay:.1f} seconds...")
-                    time.sleep(delay)
-                    continue
-                else:
-                    st.error("🚨 Gemini servers are overloaded. Using fallback analysis...")
-                    return "❌ Server overloaded - using fallback"
-            else:
-                st.error(f"🚨 API Error (Status: {response.status_code})")
-                st.error(f"Response: {response.text[:500]}")
-                return f"❌ API Error (Status: {response.status_code})"
-                
-        except requests.exceptions.Timeout:
-            if attempt < max_retries - 1:
-                st.warning("⏰ Request timeout. Retrying...")
-                time.sleep(base_delay)
-                continue
-            else:
-                st.error("⏰ Request timeout. Please try again.")
-                return "❌ Request timeout. Please try again."
-        except requests.exceptions.ConnectionError:
-            st.error("🌐 Connection error. Please check your internet connection.")
-            return "❌ Connection error. Please check your internet connection."
-        except Exception as e:
-            st.error(f"🔧 Unexpected error: {str(e)}")
-            return f"❌ Unexpected error: {str(e)}"
-    
-    return "❌ All retry attempts failed"
+LEARNING_RESOURCES = {
+    "Python": {
+        "course": "Python for Everybody (Coursera) - University of Michigan",
+        "free": "Python.org Tutorial & freeCodeCamp Python Course",
+        "project": "Build a personal expense tracker with GUI",
+        "time": "4-6 weeks"
+    },
+    "JavaScript": {
+        "course": "JavaScript Algorithms and Data Structures (freeCodeCamp)",
+        "free": "MDN Web Docs & JavaScript.info",
+        "project": "Create an interactive to-do list application",
+        "time": "3-5 weeks"
+    },
+    "React": {
+        "course": "React - The Complete Guide (Udemy)",
+        "free": "React Official Documentation & YouTube tutorials",
+        "project": "Build a weather app with API integration",
+        "time": "4-6 weeks"
+    },
+    "SQL": {
+        "course": "SQL for Data Science (Coursera)",
+        "free": "W3Schools SQL Tutorial & SQLBolt",
+        "project": "Design and query a library management database",
+        "time": "2-3 weeks"
+    },
+    "Machine Learning": {
+        "course": "Machine Learning Course (Coursera) - Andrew Ng",
+        "free": "Kaggle Learn & YouTube ML tutorials",
+        "project": "Build a house price prediction model",
+        "time": "8-10 weeks"
+    },
+    "Git": {
+        "course": "Git Complete: The definitive guide (Udemy)",
+        "free": "Git Documentation & GitHub Learning Lab",
+        "project": "Contribute to an open-source project",
+        "time": "1-2 weeks"
+    },
+    "HTML": {
+        "course": "HTML5 and CSS3 Fundamentals (edX)",
+        "free": "MDN Web Docs & freeCodeCamp",
+        "project": "Create a personal portfolio website",
+        "time": "2-3 weeks"
+    },
+    "CSS": {
+        "course": "Advanced CSS and Sass (Udemy)",
+        "free": "CSS-Tricks & MDN CSS Documentation",
+        "project": "Build a responsive restaurant website",
+        "time": "3-4 weeks"
+    }
+}
 
-# ----------------------- API Connection Test ----------------------------
-def test_gemini_connection():
-    """Test Gemini API with a simple prompt"""
-    test_prompt = "Say 'API connection successful' and nothing else."
-    result = call_gemini_api(test_prompt, max_tokens=50)
-    return "successful" in result.lower() and not result.startswith("❌")
-
-# ----------------------- Enhanced Resume Processing ----------------------------
+# ----------------------- Offline Analysis Functions ----------------------------
 def extract_text_from_pdf(uploaded_file):
-    """Extract text from uploaded PDF with better error handling"""
+    """Extract text from uploaded PDF"""
     try:
         reader = PdfReader(uploaded_file)
         text = ""
@@ -230,206 +496,134 @@ def extract_text_from_pdf(uploaded_file):
         st.error(f"📄 PDF processing error: {str(e)}")
         return ""
 
-def analyze_resume_with_ai(text: str) -> dict:
-    """Enhanced resume analysis with structured output"""
+def extract_skills_from_text(text: str) -> List[str]:
+    """Extract skills from resume text using pattern matching"""
+    found_skills = []
+    text_lower = text.lower()
     
-    # Limit text to prevent token overflow
-    limited_text = text[:8000] if len(text) > 8000 else text
-    
-    prompt = f"""
-    Analyze this resume text and extract the following information. Be very thorough and look for all details:
-
-    RESUME TEXT:
-    {limited_text}
-
-    Please extract and format the response EXACTLY like this:
-
-    Name: [Extract the person's full name]
-    Email: [Extract email address]
-    Phone: [Extract phone number]
-    Skills: [List ALL technical skills, programming languages, tools, frameworks, technologies mentioned - separate with commas]
-    Education: [Extract educational qualifications, degrees, institutions]
-    Experience: [Summarize work experience and roles]
-    Certifications: [List any certifications, courses, or credentials mentioned]
-
-    IMPORTANT: 
-    - For Skills: Look for programming languages (Python, Java, JavaScript, etc.), frameworks (React, Django, etc.), tools (Git, Docker, etc.), databases (MySQL, MongoDB, etc.), and any other technical skills
-    - If any field is not found in the resume, write "Not specified"
-    - Be thorough in extracting skills - look in project descriptions, experience sections, and skills sections
-    """
-    
-    result = call_gemini_api(prompt, max_tokens=1500)
-    
-    if result.startswith("❌"):
-        # Fallback: Try to extract basic info manually
-        return extract_basic_info_manually(limited_text)
-    
-    # Parse the result into a structured format
-    analysis = {}
-    lines = result.split('\n')
-    
-    for line in lines:
-        if ':' in line and not line.startswith('❌'):
-            key, value = line.split(':', 1)
-            key = key.strip()
-            value = value.strip()
-            if key in ['Name', 'Email', 'Phone', 'Skills', 'Education', 'Experience', 'Certifications']:
-                analysis[key] = value
-    
-    # Ensure all required fields exist
-    required_fields = ['Name', 'Email', 'Phone', 'Skills', 'Education', 'Experience', 'Certifications']
-    for field in required_fields:
-        if field not in analysis:
-            analysis[field] = "Not specified"
-    
-    # If AI didn't extract skills properly, try manual extraction
-    if analysis.get('Skills') == 'Not specified' or not analysis.get('Skills'):
-        manual_analysis = extract_basic_info_manually(limited_text)
-        if manual_analysis.get('Skills') != 'Not specified':
-            analysis['Skills'] = manual_analysis['Skills']
-    
-    return analysis
-
-def extract_basic_info_manually(text: str) -> dict:
-    """Fallback manual extraction if AI fails"""
-    analysis = {
-        'Name': 'Not specified',
-        'Email': 'Not specified', 
-        'Phone': 'Not specified',
-        'Skills': 'Not specified',
-        'Education': 'Not specified',
-        'Experience': 'Not specified',
-        'Certifications': 'Not specified'
-    }
-    
-    try:
-        # Extract email
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-        emails = re.findall(email_pattern, text)
-        if emails:
-            analysis['Email'] = emails[0]
-        
-        # Extract phone
-        phone_pattern = r'[\+]?[1-9]?[0-9]{7,15}'
-        phones = re.findall(phone_pattern, text)
-        if phones:
-            analysis['Phone'] = phones[0]
-        
-        # Extract common skills
-        common_skills = ['Python', 'Java', 'JavaScript', 'React', 'Node.js', 'SQL', 'HTML', 'CSS', 
-                        'Git', 'Docker', 'AWS', 'Machine Learning', 'Data Analysis', 'Django', 'Flask']
-        found_skills = []
-        text_lower = text.lower()
-        for skill in common_skills:
-            if skill.lower() in text_lower:
-                found_skills.append(skill)
-        
-        if found_skills:
-            analysis['Skills'] = ', '.join(found_skills)
-    
-    except Exception as e:
-        st.warning(f"Manual extraction error: {str(e)}")
-    
-    return analysis
-
-# ----------------------- Job Market Analysis ----------------------------
-def fetch_jobs_from_jsearch(job_role: str, location="India") -> List[dict]:
-    """Fetch jobs with better error handling and filtering"""
-    url = f"https://{JSEARCH_HOST}/search"
-    headers = {
-        "X-RapidAPI-Key": JSEARCH_API_KEY,
-        "X-RapidAPI-Host": JSEARCH_HOST
-    }
-    params = {
-        "query": f"{job_role} {location}",
-        "page": "1",
-        "num_pages": "1",
-        "country": "IN",
-        "employment_types": "FULLTIME,PARTTIME,CONTRACTOR"
-    }
-
-    try:
-        with st.spinner(f"🔍 Searching for {job_role} jobs in {location}..."):
-            response = requests.get(url, headers=headers, params=params, timeout=15)
+    # Check all skill categories
+    for category, skills in SKILL_DATABASE.items():
+        for skill in skills:
+            # More flexible matching
+            skill_variations = [
+                skill.lower(),
+                skill.lower().replace('.', ''),
+                skill.lower().replace(' ', ''),
+                skill.lower().replace('-', ''),
+            ]
             
-            if response.status_code == 200:
-                data = response.json()
-                jobs = data.get("data", [])
-                
-                # Filter and clean job data
-                filtered_jobs = []
-                for job in jobs[:10]:  # Limit to top 10 jobs
-                    if job.get("job_title") and job.get("employer_name"):
-                        filtered_jobs.append(job)
-                
-                return filtered_jobs
-            else:
-                st.warning(f"⚠️ Job search API returned status {response.status_code}")
-                return []
-                
-    except Exception as e:
-        st.warning(f"⚠️ Job search error: {str(e)}")
-        return []
+            for variation in skill_variations:
+                if variation in text_lower:
+                    if skill not in found_skills:
+                        found_skills.append(skill)
+                    break
+    
+    return found_skills
 
-def extract_skills_from_jobs(jobs: List[dict]) -> List[str]:
-    """Extract required skills from job descriptions using AI"""
-    if not jobs:
-        return get_default_skills_for_role("Software Developer")
-    
-    # Combine job descriptions
-    job_descriptions = []
-    for job in jobs[:5]:
-        desc = job.get("job_description", "")
-        if desc:
-            job_descriptions.append(desc[:800])  # Limit each description
-    
-    if not job_descriptions:
-        return get_default_skills_for_role("Software Developer")
-    
-    combined_text = "\n\n".join(job_descriptions)
-    
-    prompt = f"""
-    Analyze these job descriptions and extract the top 15 most important skills required.
-    Focus on both technical skills and soft skills.
-    Return ONLY a comma-separated list of skills, nothing else.
-    
-    Job Descriptions:
-    {combined_text[:3000]}
-    
-    Example format: Python, SQL, Machine Learning, Communication, Leadership
-    """
-    
-    result = call_gemini_api(prompt, max_tokens=300)
-    
-    if result.startswith("❌"):
-        return get_default_skills_for_role("Software Developer")
-    
-    # Parse skills from result
-    skills = []
-    try:
-        for skill in result.split(','):
-            clean_skill = skill.strip().strip('"').strip("'")
-            if clean_skill and len(clean_skill) < 50:
-                skills.append(clean_skill)
-    except Exception as e:
-        st.warning(f"Skill extraction error: {str(e)}")
-        return get_default_skills_for_role("Software Developer")
-    
-    return skills[:15] if skills else get_default_skills_for_role("Software Developer")
-
-def get_default_skills_for_role(role: str) -> List[str]:
-    """Get default skills based on role"""
-    default_skills = {
-        "Software Developer": ["Python", "JavaScript", "React", "Node.js", "SQL", "Git", "HTML", "CSS", "Problem Solving", "Communication", "Teamwork", "Debugging", "Testing", "Agile", "REST APIs"],
-        "Data Scientist": ["Python", "R", "SQL", "Machine Learning", "Statistics", "Pandas", "NumPy", "Matplotlib", "Jupyter", "Data Visualization", "Deep Learning", "TensorFlow", "Scikit-learn", "Communication", "Problem Solving"],
-        "Full Stack Developer": ["JavaScript", "React", "Node.js", "Python", "SQL", "MongoDB", "Express.js", "HTML", "CSS", "Git", "REST APIs", "Authentication", "Deployment", "Testing", "Problem Solving"]
+def extract_contact_info(text: str) -> Dict[str, str]:
+    """Extract contact information from resume text"""
+    info = {
+        'email': 'Not specified',
+        'phone': 'Not specified',
+        'name': 'Not specified'
     }
     
-    return default_skills.get(role, default_skills["Software Developer"])
+    # Extract email
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    emails = re.findall(email_pattern, text)
+    if emails:
+        info['email'] = emails[0]
+    
+    # Extract phone
+    phone_patterns = [
+        r'\+91[\s-]?\d{10}',
+        r'\d{10}',
+        r'\(\d{3}\)[\s-]?\d{3}[\s-]?\d{4}',
+        r'\d{3}[\s-]?\d{3}[\s-]?\d{4}'
+    ]
+    
+    for pattern in phone_patterns:
+        phones = re.findall(pattern, text)
+        if phones:
+            info['phone'] = phones[0]
+            break
+    
+    # Extract name (first few words that look like a name)
+    lines = text.split('\n')
+    for line in lines[:10]:  # Check first 10 lines
+        line = line.strip()
+        if line and len(line.split()) <= 4 and len(line) > 3:
+            # Simple heuristic: if it's not an email, phone, or common resume words
+            if '@' not in line and not re.search(r'\d{10}', line):
+                common_words = ['resume', 'cv', 'curriculum', 'vitae', 'profile', 'summary']
+                if not any(word in line.lower() for word in common_words):
+                    info['name'] = line
+                    break
+    
+    return info
 
-# ----------------------- Skill Gap Analysis ----------------------------
-def analyze_skill_gaps(user_skills: List[str], required_skills: List[str]) -> dict:
-    """Enhanced skill gap analysis with fuzzy matching"""
+def analyze_resume_offline(text: str) -> Dict:
+    """Analyze resume without using any APIs"""
+    contact_info = extract_contact_info(text)
+    skills = extract_skills_from_text(text)
+    
+    # Extract education info
+    education_keywords = ['education', 'degree', 'university', 'college', 'bachelor', 'master', 'phd', 'diploma']
+    education_info = "Not specified"
+    
+    text_lower = text.lower()
+    for keyword in education_keywords:
+        if keyword in text_lower:
+            # Find the section with education
+            lines = text.split('\n')
+            for i, line in enumerate(lines):
+                if keyword in line.lower():
+                    # Get next few lines as education info
+                    edu_lines = lines[i:i+3]
+                    education_info = ' '.join(edu_lines).strip()[:200]
+                    break
+            break
+    
+    # Extract experience info
+    experience_keywords = ['experience', 'work', 'employment', 'job', 'position', 'role']
+    experience_info = "Not specified"
+    
+    for keyword in experience_keywords:
+        if keyword in text_lower:
+            lines = text.split('\n')
+            for i, line in enumerate(lines):
+                if keyword in line.lower():
+                    exp_lines = lines[i:i+5]
+                    experience_info = ' '.join(exp_lines).strip()[:300]
+                    break
+            break
+    
+    # Extract certifications
+    cert_keywords = ['certification', 'certificate', 'certified', 'course', 'training']
+    certifications = "Not specified"
+    
+    for keyword in cert_keywords:
+        if keyword in text_lower:
+            lines = text.split('\n')
+            for i, line in enumerate(lines):
+                if keyword in line.lower():
+                    cert_lines = lines[i:i+3]
+                    certifications = ' '.join(cert_lines).strip()[:200]
+                    break
+            break
+    
+    return {
+        'Name': contact_info['name'],
+        'Email': contact_info['email'],
+        'Phone': contact_info['phone'],
+        'Skills': ', '.join(skills) if skills else 'Not specified',
+        'Education': education_info,
+        'Experience': experience_info,
+        'Certifications': certifications
+    }
+
+def analyze_skill_gaps(user_skills: List[str], required_skills: List[str]) -> Dict:
+    """Analyze skill gaps with fuzzy matching"""
     if not user_skills:
         return {"matched": [], "missing": required_skills, "match_percentage": 0}
     
@@ -444,7 +638,7 @@ def analyze_skill_gaps(user_skills: List[str], required_skills: List[str]) -> di
         is_matched = False
         
         for user_skill in user_skills_lower:
-            # Fuzzy matching - check if skills are similar
+            # Fuzzy matching
             if (req_skill_lower in user_skill or 
                 user_skill in req_skill_lower or
                 any(word in user_skill for word in req_skill_lower.split() if len(word) > 3)):
@@ -463,83 +657,51 @@ def analyze_skill_gaps(user_skills: List[str], required_skills: List[str]) -> di
         "match_percentage": round(match_percentage, 1)
     }
 
-# ----------------------- Learning Recommendations ----------------------------
-def generate_learning_path(missing_skills: List[str]) -> str:
-    """Generate personalized learning recommendations"""
+def generate_learning_recommendations(missing_skills: List[str]) -> str:
+    """Generate learning recommendations from built-in database"""
     if not missing_skills:
         return "🎉 Excellent! You have all the required skills for this role. Consider exploring advanced topics to stay ahead!"
     
-    skills_text = ", ".join(missing_skills[:8])  # Limit to 8 skills
+    recommendations = "# 📚 Your Personalized Learning Path\n\n"
+    recommendations += "*Completely free resources curated for students!*\n\n"
     
-    prompt = f"""
-    Create a personalized learning path for these skills: {skills_text}
+    for i, skill in enumerate(missing_skills[:8], 1):
+        recommendations += f"## {i}. {skill}\n\n"
+        
+        if skill in LEARNING_RESOURCES:
+            resource = LEARNING_RESOURCES[skill]
+            recommendations += f"**📚 Recommended Course:** {resource['course']}\n\n"
+            recommendations += f"**🆓 Free Resources:** {resource['free']}\n\n"
+            recommendations += f"**🛠️ Practice Project:** {resource['project']}\n\n"
+            recommendations += f"**⏱️ Estimated Time:** {resource['time']}\n\n"
+        else:
+            recommendations += f"**📚 Recommended Course:** Search for '{skill}' courses on Coursera, edX, or Udemy\n\n"
+            recommendations += f"**🆓 Free Resources:** YouTube tutorials and official documentation for {skill}\n\n"
+            recommendations += f"**🛠️ Practice Project:** Build a small project using {skill}\n\n"
+            recommendations += f"**⏱️ Estimated Time:** 2-4 weeks\n\n"
+        
+        recommendations += "---\n\n"
     
-    For each skill, provide:
-    1. 📚 One recommended online course (Coursera, Udemy, edX, etc.)
-    2. 🆓 One free learning resource (YouTube channel, documentation, tutorial)
-    3. 🛠️ One hands-on project idea to practice the skill
-    4. ⏱️ Estimated learning time
-    
-    Format your response with clear headings and emojis for better readability.
-    Keep recommendations practical and actionable.
-    """
-    
-    result = call_gemini_api(prompt, max_tokens=2500)
-    
-    if result.startswith("❌"):
-        return generate_fallback_learning_path(missing_skills)
-    
-    return result
-
-def generate_fallback_learning_path(missing_skills: List[str]) -> str:
-    """Fallback learning recommendations if AI fails"""
-    recommendations = "📚 **Learning Recommendations**\n\n"
-    
-    for skill in missing_skills[:5]:
-        recommendations += f"**{skill}:**\n"
-        recommendations += f"📚 Course: Search for '{skill}' on Coursera or Udemy\n"
-        recommendations += f"🆓 Free Resource: YouTube tutorials for '{skill}'\n"
-        recommendations += f"🛠️ Project: Build a small project using {skill}\n"
-        recommendations += f"⏱️ Time: 2-4 weeks\n\n"
+    recommendations += "## 💡 Additional Tips for Students:\n\n"
+    recommendations += "- Start with free resources before investing in paid courses\n"
+    recommendations += "- Join online communities and forums for support\n"
+    recommendations += "- Build a portfolio showcasing your projects\n"
+    recommendations += "- Practice coding daily, even if just for 30 minutes\n"
+    recommendations += "- Contribute to open-source projects on GitHub\n\n"
     
     return recommendations
 
-# ----------------------- Enhanced PDF Report Generator ----------------------------
-def clean_text_for_pdf(text: str) -> str:
-    """Clean text to remove problematic characters for PDF generation"""
-    if not text:
-        return ""
-    
-    # Replace common Unicode characters that cause encoding issues
-    replacements = {
-        '\u2022': '•',  # Bullet point
-        '\u2013': '-',  # En dash
-        '\u2014': '--', # Em dash
-        '\u2018': "'",  # Left single quote
-        '\u2019': "'",  # Right single quote
-        '\u201c': '"',  # Left double quote
-        '\u201d': '"',  # Right double quote
-        '\u2026': '...',# Ellipsis
-        '\u00a0': ' ',  # Non-breaking space
-    }
-    
-    for unicode_char, replacement in replacements.items():
-        text = text.replace(unicode_char, replacement)
-    
-    # Remove any remaining non-ASCII characters
-    text = ''.join(char if ord(char) < 128 else '?' for char in text)
-    
-    return text
-
-def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recommendations: str, jobs: List[dict]) -> BytesIO:
-    """Generate a comprehensive PDF report"""
+def create_student_report(analysis: Dict, role: str, gap_analysis: Dict, recommendations: str, jobs: List[Dict]) -> BytesIO:
+    """Generate a student-friendly PDF report"""
     try:
         pdf = FPDF(format='A4')
         pdf.add_page()
         
         # Header
-        pdf.set_font("Arial", "B", 20)
-        pdf.cell(0, 15, "AI Skill Gap Analysis Report", ln=True, align='C')
+        pdf.set_font("Arial", "B", 18)
+        pdf.cell(0, 15, "Student Skill Gap Analysis Report", ln=True, align='C')
+        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 8, f"Generated on: {datetime.now().strftime('%B %d, %Y')}", ln=True, align='C')
         pdf.ln(10)
         
         # Personal Information
@@ -547,34 +709,33 @@ def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recomm
         pdf.cell(0, 10, "Personal Information", ln=True)
         pdf.set_font("Arial", "", 11)
         
-        name = analysis.get("Name", "Professional")
+        name = analysis.get("Name", "Student")
         email = analysis.get("Email", "Not specified")
         phone = analysis.get("Phone", "Not specified")
         
-        # Clean text before adding to PDF
-        pdf.cell(0, 8, clean_text_for_pdf(f"Name: {name}"), ln=True)
-        pdf.cell(0, 8, clean_text_for_pdf(f"Email: {email}"), ln=True)
-        pdf.cell(0, 8, clean_text_for_pdf(f"Phone: {phone}"), ln=True)
-        pdf.cell(0, 8, clean_text_for_pdf(f"Target Role: {role}"), ln=True)
+        pdf.cell(0, 8, f"Name: {name}", ln=True)
+        pdf.cell(0, 8, f"Email: {email}", ln=True)
+        pdf.cell(0, 8, f"Phone: {phone}", ln=True)
+        pdf.cell(0, 8, f"Target Role: {role}", ln=True)
         pdf.ln(5)
         
         # Skills Analysis
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "Skills Analysis", ln=True)
+        pdf.cell(0, 10, "Skills Analysis Summary", ln=True)
         pdf.set_font("Arial", "", 11)
         
         pdf.cell(0, 8, f"Skills Match: {gap_analysis['match_percentage']}%", ln=True)
         pdf.cell(0, 8, f"Skills You Have: {len(gap_analysis['matched'])}", ln=True)
-        pdf.cell(0, 8, f"Skills to Develop: {len(gap_analysis['missing'])}", ln=True)
+        pdf.cell(0, 8, f"Skills to Learn: {len(gap_analysis['missing'])}", ln=True)
         pdf.ln(5)
         
         # Matched Skills
         if gap_analysis['matched']:
             pdf.set_font("Arial", "B", 12)
-            pdf.cell(0, 8, "Your Matching Skills:", ln=True)
+            pdf.cell(0, 8, "Your Existing Skills:", ln=True)
             pdf.set_font("Arial", "", 10)
             for skill in gap_analysis['matched'][:15]:
-                pdf.cell(0, 6, clean_text_for_pdf(f"* {skill}"), ln=True)
+                pdf.cell(0, 6, f"✓ {skill}", ln=True)
             pdf.ln(5)
         
         # Skills to Develop
@@ -583,42 +744,46 @@ def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recomm
             pdf.cell(0, 8, "Skills to Develop:", ln=True)
             pdf.set_font("Arial", "", 10)
             for skill in gap_analysis['missing'][:15]:
-                pdf.cell(0, 6, clean_text_for_pdf(f"- {skill}"), ln=True)
+                pdf.cell(0, 6, f"○ {skill}", ln=True)
             pdf.ln(5)
         
-        # Learning Recommendations
+        # Learning Plan
         pdf.add_page()
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "Learning Recommendations", ln=True)
+        pdf.cell(0, 10, "Your Learning Action Plan", ln=True)
         pdf.set_font("Arial", "", 9)
         
-        # Split recommendations into lines
-        clean_recommendations = clean_text_for_pdf(recommendations)
-        rec_lines = clean_recommendations.split("\n")
-        for line in rec_lines[:50]:  # Limit to prevent overflow
-            if line.strip():
-                try:
-                    pdf.multi_cell(0, 5, line.strip())
-                except:
-                    pdf.multi_cell(0, 5, "[Content formatting issue]")
+        # Simple text version of recommendations
+        simple_recs = f"Focus on learning these {len(gap_analysis['missing'])} skills:\n\n"
+        for i, skill in enumerate(gap_analysis['missing'][:8], 1):
+            simple_recs += f"{i}. {skill}\n"
+            if skill in LEARNING_RESOURCES:
+                simple_recs += f"   - Course: {LEARNING_RESOURCES[skill]['course']}\n"
+                simple_recs += f"   - Time: {LEARNING_RESOURCES[skill]['time']}\n\n"
+            else:
+                simple_recs += f"   - Search for free tutorials online\n"
+                simple_recs += f"   - Time: 2-4 weeks\n\n"
         
-        # Job Opportunities
+        # Split into lines and add to PDF
+        lines = simple_recs.split('\n')
+        for line in lines[:40]:  # Limit lines
+            if line.strip():
+                pdf.multi_cell(0, 5, line.strip())
+        
+        # Job Market Info
         if jobs:
             pdf.add_page()
             pdf.set_font("Arial", "B", 14)
-            pdf.cell(0, 10, "Current Job Opportunities", ln=True)
+            pdf.cell(0, 10, "Job Opportunities for Students", ln=True)
             pdf.set_font("Arial", "", 10)
             
-            for i, job in enumerate(jobs[:5]):
+            for i, job in enumerate(jobs[:5], 1):
                 pdf.set_font("Arial", "B", 11)
-                title = job.get('job_title', 'Job Title')[:50]
-                company = job.get('employer_name', 'Company')[:30]
-                pdf.cell(0, 8, clean_text_for_pdf(f"{i+1}. {title} at {company}"), ln=True)
-                
+                pdf.cell(0, 8, f"{i}. {job['title']} at {job['company']}", ln=True)
                 pdf.set_font("Arial", "", 9)
-                location = f"{job.get('job_city', 'N/A')}, {job.get('job_state', 'N/A')}"
-                pdf.cell(0, 6, clean_text_for_pdf(f"Location: {location}"), ln=True)
-                pdf.cell(0, 6, clean_text_for_pdf(f"Type: {job.get('job_employment_type', 'N/A')}"), ln=True)
+                pdf.cell(0, 6, f"Location: {job['location']}", ln=True)
+                pdf.cell(0, 6, f"Salary: {job['salary']}", ln=True)
+                pdf.cell(0, 6, f"Type: {job['type']}", ln=True)
                 pdf.ln(3)
         
         # Generate PDF
@@ -629,62 +794,69 @@ def create_detailed_report(analysis: dict, role: str, gap_analysis: dict, recomm
     
     except Exception as e:
         st.error(f"PDF generation error: {str(e)}")
-        # Return empty buffer
-        buffer = BytesIO()
-        return buffer
+        return BytesIO()
 
-# ----------------------- Enhanced Sidebar ----------------------------
+# ----------------------- Sidebar ----------------------------
 with st.sidebar:
     st.markdown("""
     <div class="sidebar-info">
-        <h3>🚀 How It Works</h3>
+        <h3>🎓 For Students, By Students</h3>
+        <p><strong>100% Free • No API Required • Works Offline</strong></p>
         <ol>
             <li>Upload your PDF resume</li>
-            <li>AI analyzes your skills</li>
+            <li>Get instant skill analysis</li>
             <li>Select target job role</li>
-            <li>Get skill gap analysis</li>
-            <li>Receive learning recommendations</li>
-            <li>Explore job opportunities</li>
+            <li>Discover skill gaps</li>
+            <li>Get free learning resources</li>
+            <li>Find student-friendly jobs</li>
         </ol>
     </div>
     """, unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # API Status Check
-    st.subheader("🔧 System Status")
-    if st.button("🧪 Test AI Connection", use_container_width=True):
-        with st.spinner("Testing AI connection..."):
-            if test_gemini_connection():
-                st.success("✅ AI system is ready!")
-            else:
-                st.error("❌ AI connection failed")
-                st.info("Please check your internet connection and try again.")
+    st.markdown("""
+    <div class="sidebar-info">
+        <h4>💡 Student Success Tips</h4>
+        <ul>
+            <li>Focus on 2-3 skills at a time</li>
+            <li>Build projects while learning</li>
+            <li>Join coding communities</li>
+            <li>Practice daily coding</li>
+            <li>Create a GitHub portfolio</li>
+            <li>Apply for internships early</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # Tips
     st.markdown("""
     <div class="sidebar-info">
-        <h4>💡 Tips for Best Results</h4>
+        <h4>🆓 Free Learning Resources</h4>
         <ul>
-            <li>Use a well-formatted PDF resume</li>
-            <li>Include all your technical skills</li>
-            <li>Mention certifications and projects</li>
-            <li>Keep your resume updated</li>
+            <li><strong>Coding:</strong> freeCodeCamp, Codecademy</li>
+            <li><strong>Courses:</strong> Coursera, edX, Khan Academy</li>
+            <li><strong>Practice:</strong> HackerRank, LeetCode</li>
+            <li><strong>Projects:</strong> GitHub, CodePen</li>
+            <li><strong>Community:</strong> Stack Overflow, Reddit</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
 
-# ----------------------- Main Application Interface ----------------------------
+# ----------------------- Main Application ----------------------------
 
 # File Upload Section
+st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
 st.subheader("📤 Upload Your Resume")
+st.markdown("*Upload your PDF resume for instant analysis - completely free!*")
+
 uploaded_file = st.file_uploader(
     "Choose your PDF resume file", 
     type=["pdf"],
-    help="Upload a PDF version of your resume for AI analysis"
+    help="Upload a PDF version of your resume for analysis"
 )
+st.markdown('</div>', unsafe_allow_html=True)
 
 if uploaded_file:
     # Process the uploaded file
@@ -698,11 +870,12 @@ if uploaded_file:
         with st.expander("📄 Resume Text Preview"):
             st.text_area("Extracted Text", resume_text[:2000] + "..." if len(resume_text) > 2000 else resume_text, height=200)
         
-        # AI Analysis
-        with st.spinner("🤖 AI is analyzing your resume..."):
-            analysis = analyze_resume_with_ai(resume_text)
+        # Offline Analysis
+        with st.spinner("🔍 Analyzing your resume (offline analysis)..."):
+            analysis = analyze_resume_offline(resume_text)
         
         # Display Analysis Results
+        st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
         st.subheader("📊 Resume Analysis Results")
         
         col1, col2 = st.columns(2)
@@ -715,78 +888,94 @@ if uploaded_file:
         
         with col2:
             st.markdown("**🎓 Education & Experience**")
-            st.write(f"**Education:** {analysis.get('Education', 'Not specified')}")
-            st.write(f"**Certifications:** {analysis.get('Certifications', 'Not specified')}")
+            education = analysis.get('Education', 'Not specified')
+            st.write(f"**Education:** {education[:100]}..." if len(education) > 100 else f"**Education:** {education}")
+            certifications = analysis.get('Certifications', 'Not specified')
+            st.write(f"**Certifications:** {certifications[:100]}..." if len(certifications) > 100 else f"**Certifications:** {certifications}")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
         
         # Skills Display
         skills_text = analysis.get('Skills', '')
         if skills_text and skills_text != 'Not specified':
             user_skills = [skill.strip() for skill in skills_text.split(',') if skill.strip()]
             
-            st.markdown("**🛠️ Your Skills**")
+            st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
+            st.markdown("**🛠️ Your Detected Skills**")
             skills_html = ""
             for skill in user_skills:
                 skills_html += f'<span class="skill-badge">{skill}</span>'
             st.markdown(skills_html, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
             user_skills = []
-            st.warning("⚠️ No skills detected in your resume. Please ensure your skills are clearly listed.")
-        
-        st.markdown("---")
+            st.markdown('<div class="warning-box">⚠️ No skills detected in your resume. Please ensure your skills are clearly listed in a skills section.</div>', unsafe_allow_html=True)
         
         # Job Role Selection
+        st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
         st.subheader("🎯 Select Your Target Role")
+        st.markdown("*Choose the role you're aiming for to get personalized analysis*")
         
         job_categories = {
             "💻 Software Development": ["Software Developer", "Full Stack Developer", "Frontend Developer", "Backend Developer", "Mobile App Developer"],
-            "📊 Data & Analytics": ["Data Analyst", "Data Scientist", "ML Engineer", "AI Engineer", "Business Analyst"],
-            "☁️ Cloud & DevOps": ["Cloud Engineer", "DevOps Engineer", "Site Reliability Engineer", "Infrastructure Engineer"],
-            "🔒 Cybersecurity": ["Cybersecurity Analyst", "Security Engineer", "Penetration Tester", "Security Consultant"],
-            "🎨 Design & UX": ["UI/UX Designer", "Product Designer", "Graphic Designer", "Web Designer"],
-            "📈 Management": ["Product Manager", "Project Manager", "Technical Lead", "Engineering Manager"],
-            "🧪 Quality & Testing": ["QA Engineer", "Test Automation Engineer", "Quality Analyst", "Performance Tester"]
+            "📊 Data & Analytics": ["Data Analyst", "Data Scientist"],
+            "🎨 Design & UX": ["UI/UX Designer"],
+            "🔒 Cybersecurity": ["Cybersecurity Analyst"],
+            "☁️ Cloud & DevOps": ["DevOps Engineer"]
         }
         
         selected_category = st.selectbox("Choose a category:", list(job_categories.keys()))
         selected_role = st.selectbox("Select specific role:", job_categories[selected_category])
+        st.markdown('</div>', unsafe_allow_html=True)
         
         if selected_role:
-            # Job Market Analysis
-            st.subheader("🔍 Job Market Analysis")
+            # Get job requirements
+            job_req = JOB_REQUIREMENTS.get(selected_role, {"technical": [], "soft": []})
+            required_skills = job_req["technical"] + job_req["soft"]
             
-            with st.spinner(f"Analyzing job market for {selected_role}..."):
-                jobs = fetch_jobs_from_jsearch(selected_role)
-                required_skills = extract_skills_from_jobs(jobs)
-                gap_analysis = analyze_skill_gaps(user_skills, required_skills)
+            # Skill Gap Analysis
+            gap_analysis = analyze_skill_gaps(user_skills, required_skills)
             
             # Skills Gap Visualization
+            st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
+            st.subheader("🔍 Your Skill Gap Analysis")
+            
             col1, col2, col3 = st.columns(3)
             
             with col1:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                 st.metric(
                     "🎯 Skills Match", 
                     f"{gap_analysis['match_percentage']}%",
                     delta=f"{len(gap_analysis['matched'])} skills"
                 )
+                st.markdown('</div>', unsafe_allow_html=True)
             
             with col2:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                 st.metric(
                     "✅ Skills You Have", 
                     len(gap_analysis['matched']),
                     delta="Ready to use"
                 )
+                st.markdown('</div>', unsafe_allow_html=True)
             
             with col3:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                 st.metric(
                     "📚 Skills to Learn", 
                     len(gap_analysis['missing']),
                     delta="Growth opportunities"
                 )
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
             
             # Skills Breakdown
             col1, col2 = st.columns(2)
             
             with col1:
+                st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
                 if gap_analysis['matched']:
                     st.markdown("**✅ Your Matching Skills**")
                     matched_html = ""
@@ -795,8 +984,10 @@ if uploaded_file:
                     st.markdown(matched_html, unsafe_allow_html=True)
                 else:
                     st.info("No matching skills found. This is a great opportunity to start learning!")
+                st.markdown('</div>', unsafe_allow_html=True)
             
             with col2:
+                st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
                 if gap_analysis['missing']:
                     st.markdown("**📚 Skills to Develop**")
                     missing_html = ""
@@ -805,6 +996,7 @@ if uploaded_file:
                     st.markdown(missing_html, unsafe_allow_html=True)
                 else:
                     st.success("🎉 You have all the required skills!")
+                st.markdown('</div>', unsafe_allow_html=True)
             
             # Skill Gap Visualization Chart
             if gap_analysis['matched'] or gap_analysis['missing']:
@@ -813,13 +1005,17 @@ if uploaded_file:
                         name='Skills You Have',
                         x=['Skills Analysis'],
                         y=[len(gap_analysis['matched'])],
-                        marker_color='#28a745'
+                        marker_color='#51cf66',
+                        text=[len(gap_analysis['matched'])],
+                        textposition='auto',
                     ),
                     go.Bar(
                         name='Skills to Learn',
                         x=['Skills Analysis'],
                         y=[len(gap_analysis['missing'])],
-                        marker_color='#dc3545'
+                        marker_color='#ff6b6b',
+                        text=[len(gap_analysis['missing'])],
+                        textposition='auto',
                     )
                 ])
                 
@@ -827,74 +1023,72 @@ if uploaded_file:
                     title='Your Skill Gap Analysis',
                     barmode='stack',
                     height=400,
-                    showlegend=True
+                    showlegend=True,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
             
             # Learning Recommendations
-            st.subheader("📚 Personalized Learning Path")
+            st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
+            st.subheader("📚 Your Free Learning Path")
+            st.markdown("*Curated free resources perfect for students*")
             
             if gap_analysis['missing']:
-                with st.spinner("🎓 Generating personalized learning recommendations..."):
-                    recommendations = generate_learning_path(gap_analysis['missing'])
-                
+                recommendations = generate_learning_recommendations(gap_analysis['missing'])
                 st.markdown(recommendations)
             else:
-                st.success("🎉 Congratulations! You have all the required skills. Consider exploring advanced topics or leadership skills to advance your career further.")
+                st.markdown('<div class="success-box">🎉 Congratulations! You have all the required skills. Consider exploring advanced topics or leadership skills to advance your career further.</div>', unsafe_allow_html=True)
                 recommendations = "All required skills are present. Focus on advanced topics and leadership development."
             
-            # Job Opportunities
-            st.subheader("💼 Current Job Opportunities")
+            st.markdown('</div>', unsafe_allow_html=True)
             
+            # Job Opportunities
+            st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
+            st.subheader("💼 Student-Friendly Job Opportunities")
+            
+            jobs = SAMPLE_JOBS.get(selected_role, [])
             if jobs:
-                st.info(f"Found {len(jobs)} job opportunities for {selected_role}")
+                st.info(f"Found {len(jobs)} entry-level opportunities for {selected_role}")
                 
-                for i, job in enumerate(jobs[:6]):  # Show top 6 jobs
-                    with st.expander(f"🏢 {job.get('job_title', 'Job Title')} at {job.get('employer_name', 'Company')}"):
-                        job_col1, job_col2 = st.columns([3, 1])
-                        
-                        with job_col1:
-                            st.write(f"**📍 Location:** {job.get('job_city', 'N/A')}, {job.get('job_state', 'N/A')}")
-                            st.write(f"**💼 Employment Type:** {job.get('job_employment_type', 'N/A')}")
-                            st.write(f"**💰 Salary:** {job.get('job_salary', 'Not specified')}")
-                            
-                            description = job.get("job_description", "No description available")
-                            st.write(f"**📝 Description:** {description[:500]}...")
-                        
-                        with job_col2:
-                            if job.get("job_apply_link"):
-                                st.link_button("🚀 Apply Now", job["job_apply_link"], use_container_width=True)
-                            
-                            posted_date = job.get('job_posted_at_datetime_utc', 'N/A')
-                            if posted_date and posted_date != 'N/A' and len(str(posted_date)) >= 10:
-                                st.write(f"**📅 Posted:** {str(posted_date)[:10]}")
-                            else:
-                                st.write(f"**📅 Posted:** Not specified")
+                for i, job in enumerate(jobs):
+                    st.markdown('<div class="job-card">', unsafe_allow_html=True)
+                    st.markdown(f"### 🏢 {job['title']}")
+                    st.markdown(f"**Company:** {job['company']}")
+                    st.markdown(f"**📍 Location:** {job['location']}")
+                    st.markdown(f"**💼 Type:** {job['type']}")
+                    st.markdown(f"**💰 Salary:** {job['salary']}")
+                    st.markdown(f"**📝 Description:** {job['description']}")
+                    st.markdown(f"**📅 Posted:** {job['posted']}")
+                    st.markdown('</div>', unsafe_allow_html=True)
             else:
-                st.warning("⚠️ No job opportunities found at the moment. Try a different role or check back later.")
+                st.markdown('<div class="info-box">💡 Keep checking job portals like Naukri, LinkedIn, and company websites for fresh opportunities!</div>', unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
             
             # Report Generation
-            st.subheader("📥 Download Your Comprehensive Report")
+            st.markdown('<div class="neumorphic-card">', unsafe_allow_html=True)
+            st.subheader("📥 Download Your Career Report")
+            st.markdown("*Get a comprehensive PDF report with your analysis and learning plan*")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("📄 Generate Detailed PDF Report", use_container_width=True):
+                if st.button("📄 Generate Student Report", use_container_width=True):
                     with st.spinner("📊 Creating your personalized report..."):
                         try:
-                            report_buffer = create_detailed_report(
+                            report_buffer = create_student_report(
                                 analysis, selected_role, gap_analysis, recommendations, jobs
                             )
                             
-                            if report_buffer.getvalue():  # Check if buffer has content
+                            if report_buffer.getvalue():
                                 st.success("✅ Report generated successfully!")
                                 
-                                # Download button
                                 st.download_button(
                                     label="⬇️ Download PDF Report",
                                     data=report_buffer,
-                                    file_name=f"Skill_Gap_Analysis_{selected_role.replace(' ', '_')}.pdf",
+                                    file_name=f"Student_Career_Report_{selected_role.replace(' ', '_')}.pdf",
                                     mime="application/pdf",
                                     use_container_width=True
                                 )
@@ -904,22 +1098,27 @@ if uploaded_file:
                             st.error(f"❌ Error generating report: {str(e)}")
             
             with col2:
-                # Summary Statistics
-                st.info(f"""
-                **📊 Analysis Summary**
+                st.markdown('<div class="info-box">', unsafe_allow_html=True)
+                st.markdown(f"""
+                **📊 Your Analysis Summary**
                 - Skills Analyzed: {len(required_skills)}
                 - Match Rate: {gap_analysis['match_percentage']}%
                 - Jobs Found: {len(jobs)}
-                - Learning Resources: Generated
+                - Learning Resources: ✅ Generated
+                - Report Type: Student-Friendly
                 """)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
 # Footer
 st.markdown("---")
 st.markdown("""
-<div style='text-align: center; padding: 2rem; background: #f8f9fa; border-radius: 10px; margin-top: 2rem;'>
-    <h4>🔒 Privacy & Security</h4>
-    <p>Your resume data is processed securely and never stored permanently on our servers.</p>
-    <p>🤖 Powered by Google Gemini AI & JSearch API | 💡 Built with Streamlit</p>
-    <p><small>For support or feedback, please ensure your internet connection is stable and API keys are valid.</small></p>
+<div class="neumorphic-card" style="text-align: center;">
+    <h4>🎓 Built for Students, By Students</h4>
+    <p><strong>100% Free • No API Required • Privacy First</strong></p>
+    <p>Your resume data is processed locally and never stored on our servers.</p>
+    <p>💡 <strong>Pro Tip:</strong> Bookmark this tool and use it regularly to track your skill development!</p>
+    <div class="student-badge">Keep Learning • Keep Growing • Keep Coding</div>
 </div>
 """, unsafe_allow_html=True)
