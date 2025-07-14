@@ -203,77 +203,6 @@ def call_gemini_api(prompt: str, max_tokens: int = 2000) -> str:
     
     return "❌ All retry attempts failed"
 
-def analyze_resume_with_ai(text: str) -> dict:
-    """Enhanced resume analysis with structured output and fallback"""
-    
-    # Limit text to prevent token overflow
-    limited_text = text[:8000] if len(text) > 8000 else text
-    
-    prompt = f"""
-    Analyze this resume text and extract the following information. Be very thorough and look for all details:
-
-    RESUME TEXT:
-    {limited_text}
-
-    Please extract and format the response EXACTLY like this:
-
-    Name: [Extract the person's full name]
-    Email: [Extract email address]
-    Phone: [Extract phone number]
-    Skills: [List ALL technical skills, programming languages, tools, frameworks, technologies mentioned - separate with commas]
-    Education: [Extract educational qualifications, degrees, institutions]
-    Experience: [Summarize work experience and roles]
-    Certifications: [List any certifications, courses, or credentials mentioned]
-
-    IMPORTANT: 
-    - For Skills: Look for programming languages (Python, Java, JavaScript, etc.), frameworks (React, Django, etc.), tools (Git, Docker, etc.), databases (MySQL, MongoDB, etc.), and any other technical skills
-    - If any field is not found in the resume, write "Not specified"
-    - Be thorough in extracting skills - look in project descriptions, experience sections, and skills sections
-    """
-    
-    result = call_gemini_api(prompt, max_tokens=1500)
-    
-    # If API failed due to overload or other issues, use manual extraction
-    if result.startswith("❌"):
-        st.info("🔄 Using manual analysis due to AI server issues...")
-        return extract_basic_info_manually(limited_text)
-    
-    # Parse the result into a structured format
-    analysis = {}
-    lines = result.split('\n')
-    
-    for line in lines:
-        if ':' in line and not line.startswith('❌'):
-            key, value = line.split(':', 1)
-            key = key.strip()
-            value = value.strip()
-            if key in ['Name', 'Email', 'Phone', 'Skills', 'Education', 'Experience', 'Certifications']:
-                analysis[key] = value
-    
-    # Ensure all required fields exist
-    required_fields = ['Name', 'Email', 'Phone', 'Skills', 'Education', 'Experience', 'Certifications']
-    for field in required_fields:
-        if field not in analysis:
-            analysis[field] = "Not specified"
-    
-    # If AI didn't extract skills properly, try manual extraction
-    if analysis.get('Skills') == 'Not specified' or not analysis.get('Skills'):
-        manual_analysis = extract_basic_info_manually(limited_text)
-        if manual_analysis.get('Skills') != 'Not specified':
-            analysis['Skills'] = manual_analysis['Skills']
-    
-    return analysis
-            
-    except requests.exceptions.Timeout:
-        st.error("⏰ Request timeout. Please try again.")
-        return "❌ Request timeout. Please try again."
-    except requests.exceptions.ConnectionError:
-        st.error("🌐 Connection error. Please check your internet connection.")
-        return "❌ Connection error. Please check your internet connection."
-    except Exception as e:
-        st.error(f"🔧 Unexpected error: {str(e)}")
-        return f"❌ Unexpected error: {str(e)}"
-
 # ----------------------- API Connection Test ----------------------------
 def test_gemini_connection():
     """Test Gemini API with a simple prompt"""
@@ -353,6 +282,12 @@ def analyze_resume_with_ai(text: str) -> dict:
         if field not in analysis:
             analysis[field] = "Not specified"
     
+    # If AI didn't extract skills properly, try manual extraction
+    if analysis.get('Skills') == 'Not specified' or not analysis.get('Skills'):
+        manual_analysis = extract_basic_info_manually(limited_text)
+        if manual_analysis.get('Skills') != 'Not specified':
+            analysis['Skills'] = manual_analysis['Skills']
+    
     return analysis
 
 def extract_basic_info_manually(text: str) -> dict:
@@ -367,29 +302,33 @@ def extract_basic_info_manually(text: str) -> dict:
         'Certifications': 'Not specified'
     }
     
-    # Extract email
-    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-    emails = re.findall(email_pattern, text)
-    if emails:
-        analysis['Email'] = emails[0]
+    try:
+        # Extract email
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        emails = re.findall(email_pattern, text)
+        if emails:
+            analysis['Email'] = emails[0]
+        
+        # Extract phone
+        phone_pattern = r'[\+]?[1-9]?[0-9]{7,15}'
+        phones = re.findall(phone_pattern, text)
+        if phones:
+            analysis['Phone'] = phones[0]
+        
+        # Extract common skills
+        common_skills = ['Python', 'Java', 'JavaScript', 'React', 'Node.js', 'SQL', 'HTML', 'CSS', 
+                        'Git', 'Docker', 'AWS', 'Machine Learning', 'Data Analysis', 'Django', 'Flask']
+        found_skills = []
+        text_lower = text.lower()
+        for skill in common_skills:
+            if skill.lower() in text_lower:
+                found_skills.append(skill)
+        
+        if found_skills:
+            analysis['Skills'] = ', '.join(found_skills)
     
-    # Extract phone
-    phone_pattern = r'[\+]?[1-9]?[0-9]{7,15}'
-    phones = re.findall(phone_pattern, text)
-    if phones:
-        analysis['Phone'] = phones[0]
-    
-    # Extract common skills
-    common_skills = ['Python', 'Java', 'JavaScript', 'React', 'Node.js', 'SQL', 'HTML', 'CSS', 
-                    'Git', 'Docker', 'AWS', 'Machine Learning', 'Data Analysis', 'Django', 'Flask']
-    found_skills = []
-    text_lower = text.lower()
-    for skill in common_skills:
-        if skill.lower() in text_lower:
-            found_skills.append(skill)
-    
-    if found_skills:
-        analysis['Skills'] = ', '.join(found_skills)
+    except Exception as e:
+        st.warning(f"Manual extraction error: {str(e)}")
     
     return analysis
 
@@ -467,10 +406,14 @@ def extract_skills_from_jobs(jobs: List[dict]) -> List[str]:
     
     # Parse skills from result
     skills = []
-    for skill in result.split(','):
-        clean_skill = skill.strip().strip('"').strip("'")
-        if clean_skill and len(clean_skill) < 50:
-            skills.append(clean_skill)
+    try:
+        for skill in result.split(','):
+            clean_skill = skill.strip().strip('"').strip("'")
+            if clean_skill and len(clean_skill) < 50:
+                skills.append(clean_skill)
+    except Exception as e:
+        st.warning(f"Skill extraction error: {str(e)}")
+        return get_default_skills_for_role("Software Developer")
     
     return skills[:15] if skills else get_default_skills_for_role("Software Developer")
 
