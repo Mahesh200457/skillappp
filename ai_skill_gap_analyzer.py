@@ -1,6 +1,7 @@
 import streamlit as st
 from PyPDF2 import PdfReader
 import openai
+from openai import OpenAI
 import requests
 import json
 import pandas as pd
@@ -13,6 +14,8 @@ from io import BytesIO
 openai.api_key = "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"
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
+
+client = OpenAI(api_key=openai.api_key)
 
 st.set_page_config(page_title="AI Skill Gap Analyzer", layout="wide")
 st.title("🧠 AI-Based Skill Gap Analyzer Platform")
@@ -33,7 +36,7 @@ def analyze_resume_gpt(text: str) -> str:
     Resume Text:
     {text}
     """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
     )
@@ -58,7 +61,7 @@ def extract_required_skills_from_jobs(jobs: List[dict]) -> List[str]:
     Job Descriptions:
     {job_descriptions[:3000]}
     """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
     )
@@ -82,7 +85,7 @@ def recommend_learning_resources(missing_skills: List[str]) -> str:
 
     Skills: {', '.join(missing_skills)}
     """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
     )
