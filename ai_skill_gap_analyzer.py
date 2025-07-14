@@ -13,7 +13,7 @@ import time
 
 # ✅ Updated Gemini API credentials
 GEMINI_API_KEY = "AIzaSyB-aZF6eOVKgE8TLD_ZCYm_lS6AIzw_1Yw"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
 
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
@@ -749,8 +749,10 @@ if uploaded_file:
                                 st.link_button("🚀 Apply Now", job["job_apply_link"], use_container_width=True)
                             
                             posted_date = job.get('job_posted_at_datetime_utc', 'N/A')
-                            if posted_date != 'N/A':
+                            if posted_date and posted_date != 'N/A' and len(str(posted_date)) >= 10:
                                 st.write(f"**📅 Posted:** {posted_date[:10]}")
+                            else:
+                                st.write(f"**📅 Posted:** Not specified")
             else:
                 st.warning("⚠️ No job opportunities found at the moment. Try a different role or check back later.")
             
