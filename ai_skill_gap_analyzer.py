@@ -1,7 +1,5 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-import openai
-from openai import OpenAI
 import requests
 import json
 import pandas as pd
@@ -16,33 +14,123 @@ def get_api_keys():
     """Get API keys from environment variables or Streamlit secrets"""
     try:
         # Try to get from Streamlit secrets first
-        openai_key = st.secrets.get("OPENAI_API_KEY")
+        gemini_key = st.secrets.get("GEMINI_API_KEY")
         jsearch_key = st.secrets.get("JSEARCH_API_KEY")
     except:
         # Fall back to environment variables
-        openai_key = os.getenv("OPENAI_API_KEY")
+        gemini_key = os.getenv("GEMINI_API_KEY")
         jsearch_key = os.getenv("JSEARCH_API_KEY")
     
-    return openai_key, jsearch_key
+    return gemini_key, jsearch_key
 
 # Get API keys
-OPENAI_API_KEY, JSEARCH_API_KEY = get_api_keys()
+GEMINI_API_KEY, JSEARCH_API_KEY = get_api_keys()
 JSEARCH_HOST = "jsearch.p.rapidapi.com"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
 
-# Initialize OpenAI client only if API key is available
-client = None
-if OPENAI_API_KEY:
+def call_gemini_api(prompt: str, max_tokens: int = 1000) -> str:
+    """Call Gemini API with the given prompt"""
+    if not GEMINI_API_KEY:
+        return "❌ Gemini API key not configured."
+    
+    headers = {
+        'Content-Type': 'application/json',
+    }
+    
+    data = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.3,
+            "topK": 1,
+            "topP": 1,
+            "maxOutputTokens": max_tokens,
+            "stopSequences": []
+        },
+        "safetySettings": [
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            }
+        ]
+    }
+    
     try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        response = requests.post(
+            f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        if 'candidates' in result and len(result['candidates']) > 0:
+            if 'content' in result['candidates'][0]:
+                return result['candidates'][0]['content']['parts'][0]['text']
+        
+        return "❌ No response generated from Gemini API."
+        
+    except requests.exceptions.RequestException as e:
+        return f"❌ Error calling Gemini API: {str(e)}"
+    except KeyError as e:
+        return f"❌ Unexpected response format from Gemini API: {str(e)}"
     except Exception as e:
-        st.error(f"Error initializing OpenAI client: {str(e)}")
+        return f"❌ Error processing Gemini response: {str(e)}"
 
 st.set_page_config(page_title="AI Skill Gap Analyzer", layout="wide")
 st.title("🧠 AI-Based Skill Gap Analyzer Platform")
 st.markdown("Upload your resume to find skill gaps, personalized learning resources, and real-time job matches in India.")
 
 # Check if API keys are configured
+if not GEMINI_API_KEY:
+    st.error("⚠️ Gemini API key is not configured. Please set up your API key in Streamlit secrets or environment variables.")
+    st.markdown("""
+    ### How to set up API keys:
+    
+    **Option 1: Streamlit Secrets (Recommended for deployment)**
+    1. Create a `.streamlit/secrets.toml` file in your project directory
+    2. Add your keys:
+    ```toml
+    GEMINI_API_KEY = "your-gemini-api-key-here"
+    JSEARCH_API_KEY = "your-jsearch-api-key-here"
+    ```
+    
+    **Option 2: Environment Variables**
+    1. Set environment variables:
+    ```bash
+    export GEMINI_API_KEY="your-gemini-api-key-here"
+    export JSEARCH_API_KEY="your-jsearch-api-key-here"
+    ```
+    
+    **Get your API keys:**
+    - Gemini: https://makersuite.google.com/app/apikey
+    - JSearch: https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
+    """)
+    st.stop()
 
+if not JSEARCH_API_KEY:
+    st.warning("⚠️ JSearch API key is not configured. Job search functionality will be limited.")
 
 uploaded_file = st.file_uploader("Upload your PDF Resume", type=["pdf"])
 
@@ -59,11 +147,8 @@ def extract_text_from_pdf(uploaded_file):
         st.error(f"Error extracting text from PDF: {str(e)}")
         return None
 
-def analyze_resume_gpt(text: str) -> str:
-    """Analyze resume using OpenAI GPT"""
-    if not client:
-        return "OpenAI client not initialized. Please check your API key."
-    
+def analyze_resume_gemini(text: str) -> str:
+    """Analyze resume using Gemini API"""
     prompt = f"""
     Analyze this resume and extract the following information in a structured format:
     
@@ -80,20 +165,7 @@ def analyze_resume_gpt(text: str) -> str:
     Please format your response clearly with each section on a new line.
     """
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
-            temperature=0.3
-        )
-        return response.choices[0].message.content
-    except openai.AuthenticationError:
-        return "❌ Authentication Error: Invalid OpenAI API key. Please check your API key configuration."
-    except openai.RateLimitError:
-        return "❌ Rate limit exceeded. Please try again later."
-    except Exception as e:
-        return f"❌ Error analyzing resume: {str(e)}"
+    return call_gemini_api(prompt, max_tokens=1000)
 
 def fetch_jobs_from_jsearch(job_role: str, location: str = "India") -> List[dict]:
     """Fetch jobs from JSearch API"""
@@ -121,8 +193,8 @@ def fetch_jobs_from_jsearch(job_role: str, location: str = "India") -> List[dict
         return []
 
 def extract_required_skills_from_jobs(jobs: List[dict]) -> List[str]:
-    """Extract required skills from job descriptions using GPT"""
-    if not client or not jobs:
+    """Extract required skills from job descriptions using Gemini"""
+    if not jobs:
         return []
     
     job_descriptions = "\n\n".join([
@@ -138,34 +210,27 @@ def extract_required_skills_from_jobs(jobs: List[dict]) -> List[str]:
     {job_descriptions}
     """
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
-            temperature=0.3
-        )
-        extracted = response.choices[0].message.content.strip()
-        
-        # Try to safely evaluate the response
-        try:
-            # Remove any markdown formatting
-            if "```" in extracted:
-                extracted = extracted.split("```")[1].strip()
-            if extracted.startswith("python"):
-                extracted = extracted[6:].strip()
-            
-            skills = eval(extracted)
-            return skills if isinstance(skills, list) else []
-        except:
-            # If eval fails, try to parse manually
-            import re
-            skills = re.findall(r'"([^"]+)"', extracted)
-            return skills[:20]  # Limit to 20 skills
-            
-    except Exception as e:
-        st.warning(f"Error extracting skills from jobs: {str(e)}")
+    response = call_gemini_api(prompt, max_tokens=500)
+    
+    if "❌" in response:
+        st.warning(f"Error extracting skills from jobs: {response}")
         return []
+    
+    try:
+        # Remove any markdown formatting
+        extracted = response.strip()
+        if "```" in extracted:
+            extracted = extracted.split("```")[1].strip()
+        if extracted.startswith("python"):
+            extracted = extracted[6:].strip()
+        
+        skills = eval(extracted)
+        return skills if isinstance(skills, list) else []
+    except:
+        # If eval fails, try to parse manually
+        import re
+        skills = re.findall(r'"([^"]+)"', response)
+        return skills[:20]  # Limit to 20 skills
 
 def detect_skill_gaps(user_skills: List[str], required_skills: List[str]) -> dict:
     """Detect skill gaps between user skills and required skills"""
@@ -197,7 +262,7 @@ def detect_skill_gaps(user_skills: List[str], required_skills: List[str]) -> dic
 
 def recommend_learning_resources(missing_skills: List[str]) -> str:
     """Recommend learning resources for missing skills"""
-    if not client or not missing_skills:
+    if not missing_skills:
         return "No specific recommendations available."
     
     prompt = f"""
@@ -207,21 +272,13 @@ def recommend_learning_resources(missing_skills: List[str]) -> str:
     2. 1-2 free resources (YouTube channels, documentation, tutorials)
     3. Practice platforms if applicable
     
-    Skills to learn: {', '.join(missing_skills[:10])}  # Limit to 10 skills
+    Skills to learn: {', '.join(missing_skills[:10])}
     
-    Format your response in a clear, organized manner.
+    Format your response in a clear, organized manner with proper headings and bullet points.
     """
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1500,
-            temperature=0.3
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Error generating recommendations: {str(e)}"
+    response = call_gemini_api(prompt, max_tokens=1500)
+    return response if "❌" not in response else "Error generating recommendations."
 
 def generate_pdf_report(name: str, role: str, matched: List[str], missing: List[str], recommendations: str) -> BytesIO:
     """Generate PDF report of skill gap analysis"""
@@ -278,13 +335,27 @@ def generate_pdf_report(name: str, role: str, matched: List[str], missing: List[
         st.error(f"Error generating PDF: {str(e)}")
         return BytesIO()
 
+# Test Gemini API connection
+def test_gemini_connection():
+    """Test if Gemini API is working"""
+    test_response = call_gemini_api("Hello, please respond with 'API is working correctly!'", max_tokens=50)
+    return "API is working correctly!" in test_response
+
+# Show API status
+if GEMINI_API_KEY:
+    with st.spinner("Testing Gemini API connection..."):
+        if test_gemini_connection():
+            st.success("✅ Gemini API is connected and working!")
+        else:
+            st.error("❌ Gemini API connection failed. Please check your API key.")
+
 # Main application logic
 if uploaded_file:
     with st.spinner("Analyzing resume..."):
         resume_text = extract_text_from_pdf(uploaded_file)
         
         if resume_text:
-            analysis_result = analyze_resume_gpt(resume_text)
+            analysis_result = analyze_resume_gemini(resume_text)
             
             if "❌" in analysis_result:
                 st.error(analysis_result)
@@ -437,3 +508,4 @@ else:
 # Footer
 st.markdown("---")
 st.markdown("🔒 **Privacy Note:** Your resume is processed securely and is not stored on our servers.")
+st.markdown("🤖 **Powered by:** Google Gemini AI")
