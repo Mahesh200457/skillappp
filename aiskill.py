@@ -18,8 +18,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# API Keys - USING YOUR GEMINI API KEY
-GEMINI_API_KEY = "AIzaSyB-aZF6eOVKgE8TLD_ZCYm_lS6AIzw_1Yw"
+# API Keys - UPDATED WITH YOUR NEW GEMINI KEY
+GEMINI_API_KEY = "AIzaSyDOsFhRWN2-uPpOZqHbU3HZ5prZkSuqiBA"
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 
 # Custom CSS for modern, clean design
@@ -118,6 +118,51 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.2);
     }
     
+    .chat-container {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 1rem;
+        margin: 1rem 0;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        height: 600px;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        max-height: 400px;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        background: white;
+    }
+    
+    .user-msg {
+        background: #667eea;
+        color: white;
+        padding: 0.8rem;
+        border-radius: 15px 15px 5px 15px;
+        margin: 0.5rem 0;
+        margin-left: 2rem;
+        text-align: right;
+        font-size: 0.9rem;
+    }
+    
+    .bot-msg {
+        background: #f0f2f6;
+        color: #333;
+        padding: 0.8rem;
+        border-radius: 15px 15px 15px 5px;
+        margin: 0.5rem 0;
+        margin-right: 2rem;
+        font-size: 0.9rem;
+    }
+    
     .stButton > button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -159,9 +204,10 @@ def extract_text_from_pdf(pdf_file):
         return None
 
 def call_gemini_api(prompt):
-    """Call Gemini API with the provided prompt"""
+    """Call Gemini API with the provided prompt - FIXED VERSION"""
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+        # FIXED: Using correct model name and API endpoint
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         
         headers = {
             'Content-Type': 'application/json',
@@ -176,7 +222,13 @@ def call_gemini_api(prompt):
                         }
                     ]
                 }
-            ]
+            ],
+            "generationConfig": {
+                "temperature": 0.7,
+                "topK": 40,
+                "topP": 0.95,
+                "maxOutputTokens": 2048
+            }
         }
         
         response = requests.post(url, headers=headers, json=data, timeout=30)
@@ -470,8 +522,8 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Main Content
-col1, col2 = st.columns([2, 1])
+# Main Content - 3 COLUMNS: Main Content + Chatbot on Right
+col1, col2 = st.columns([2.5, 1])
 
 with col1:
     # Input Section
@@ -786,7 +838,57 @@ with col1:
             
             st.markdown('</div>', unsafe_allow_html=True)
 
+# RIGHT SIDE COLUMN - CHATBOT AND JOB SEARCH
 with col2:
+    # AI CHATBOT - RIGHT SIDE AS REQUESTED
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    st.markdown("## 💬 AI Career Assistant (Powered by Gemini)")
+    
+    # Chat messages container
+    st.markdown('<div class="chat-messages">', unsafe_allow_html=True)
+    
+    # Display chat messages
+    for message in st.session_state.chat_messages:
+        if message['role'] == 'user':
+            st.markdown(f'<div class="user-msg">{message["content"]}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="bot-msg">{message["content"]}</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Quick action buttons
+    st.markdown("**Quick Questions:**")
+    quick_questions = [
+        "How to improve my resume?",
+        "Best skills for my field?",
+        "Interview preparation tips?",
+        "Salary negotiation advice?"
+    ]
+    
+    cols = st.columns(2)
+    for i, question in enumerate(quick_questions):
+        with cols[i % 2]:
+            if st.button(question, key=f"quick_{i}"):
+                context = str(st.session_state.user_profile) + str(st.session_state.analysis_results)
+                response = chat_with_ai(question, context)
+                
+                st.session_state.chat_messages.append({"role": "user", "content": question})
+                st.session_state.chat_messages.append({"role": "assistant", "content": response})
+                st.rerun()
+    
+    # Chat input
+    user_input = st.text_input("Ask Gemini AI anything about your career...", key="chat_input")
+    if st.button("Send to Gemini", key="send_chat", type="primary"):
+        if user_input:
+            context = str(st.session_state.user_profile) + str(st.session_state.analysis_results)
+            response = chat_with_ai(user_input, context)
+            
+            st.session_state.chat_messages.append({"role": "user", "content": user_input})
+            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+            st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     # Job Search Section
     st.markdown('<div class="content-card">', unsafe_allow_html=True)
     st.markdown("## 💼 Job Opportunities")
@@ -803,7 +905,7 @@ with col2:
                 if jobs:
                     st.success(f"Found {len(jobs)} job opportunities!")
                     
-                    for job in jobs[:4]:  # Show top 4 jobs
+                    for job in jobs[:3]:  # Show top 3 jobs
                         st.markdown(f"""
                         <div class="job-item">
                             <h4 style="color: #333; margin: 0 0 0.5rem 0;">{job.get('job_title', 'N/A')}</h4>
@@ -833,50 +935,6 @@ with col2:
             st.markdown(f"**{i}.** {trend}")
         
         st.markdown('</div>', unsafe_allow_html=True)
-
-# Chatbot Section
-st.markdown('<div class="content-card">', unsafe_allow_html=True)
-st.markdown("## 💬 AI Career Assistant (Powered by Gemini)")
-
-# Display chat messages
-for message in st.session_state.chat_messages:
-    if message['role'] == 'user':
-        st.markdown(f"**You:** {message['content']}")
-    else:
-        st.markdown(f"**Gemini Assistant:** {message['content']}")
-
-# Quick action buttons
-st.markdown("**Quick Questions:**")
-quick_questions = [
-    "How to improve my resume?",
-    "Best skills for my field?",
-    "Interview preparation tips?",
-    "Salary negotiation advice?"
-]
-
-cols = st.columns(2)
-for i, question in enumerate(quick_questions):
-    with cols[i % 2]:
-        if st.button(question, key=f"quick_{i}"):
-            context = str(st.session_state.user_profile) + str(st.session_state.analysis_results)
-            response = chat_with_ai(question, context)
-            
-            st.session_state.chat_messages.append({"role": "user", "content": question})
-            st.session_state.chat_messages.append({"role": "assistant", "content": response})
-            st.rerun()
-
-# Chat input
-user_input = st.text_input("Ask Gemini AI anything about your career...", key="chat_input")
-if st.button("Send to Gemini", key="send_chat", type="primary"):
-    if user_input:
-        context = str(st.session_state.user_profile) + str(st.session_state.analysis_results)
-        response = chat_with_ai(user_input, context)
-        
-        st.session_state.chat_messages.append({"role": "user", "content": user_input})
-        st.session_state.chat_messages.append({"role": "assistant", "content": response})
-        st.rerun()
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 # Footer
 st.markdown("""
