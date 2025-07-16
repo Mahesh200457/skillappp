@@ -17,8 +17,9 @@ from datetime import datetime, timedelta
 # --- API Keys ---
 # IMPORTANT: For a real application, consider using Streamlit Secrets or environment variables
 # instead of hardcoding keys directly in the script for better security practices.
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY" # Replace with your actual Gemini API Key
-JSEARCH_API_KEY = "YOUR_JSEARCH_API_KEY" # Replace with your actual JSearch API Key
+GEMINI_API_KEY = "AIzaSyDOsFhRWN2-uPpOZqHbU3HZ5prZkSuqiBA" # Replace with your actual Gemini API Key
+JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
+ # Replace with your actual JSearch API Key
 
 # --- Gemini API Configuration ---
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
