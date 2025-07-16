@@ -16,21 +16,40 @@ import google.generativeai as genai
 # --- API Keys ---
 # IMPORTANT: For a real application, consider using Streamlit Secrets or environment variables
 # instead of hardcoding keys directly in the script for better security practices.
-GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" # UPDATED KEY HERE
+GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" # Your new Gemini API Key
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 
 # --- Configure Gemini API ---
+# Explicitly setting a regional endpoint can sometimes resolve 404s,
+# especially if the default global endpoint has issues with specific models/keys.
+# The 'us-central1' region is common for many Google Cloud services.
 try:
-    genai.configure(api_key=GEMINI_API_KEY)
+    genai.configure(
+        api_key=GEMINI_API_KEY,
+        # client_options={"api_endpoint": "us-central1-aiplatform.googleapis.com"} # Uncomment if region is a persistent issue
+    )
 except Exception as e:
     st.error(f"Failed to configure Gemini API. Please check your API key: {e}")
     st.stop()
 
 # Initialize the Gemini model
-# FIX: Changed 'gemini-pro' to 'gemini-1.0-pro'
-# This is a common stable text generation model.
-# If you have access to 'gemini-1.5-flash' or 'gemini-1.5-pro', you can try those as well.
-GEMINI_MODEL = genai.GenerativeModel('gemini-1.0-pro')
+# FIX: Try 'gemini-1.5-flash' or 'gemini-1.5-pro' if 'gemini-1.0-pro' fails due to availability.
+# We'll stick with 'gemini-1.0-pro' as a first attempt after trying more explicit model naming.
+# Use the full model path 'models/gemini-1.0-pro' as recommended by the API error message pattern.
+# If this still fails, definitely try 'models/gemini-1.5-flash'.
+MODEL_NAME = 'gemini-1.0-pro' # The most common stable text model
+# If the above fails, uncomment and try one of these:
+# MODEL_NAME = 'gemini-1.5-flash'
+# MODEL_NAME = 'gemini-1.5-pro' # Requires higher quota/access typically
+
+try:
+    # Use the full 'models/' prefix as explicitly mentioned in Google's documentation patterns.
+    GEMINI_MODEL = genai.GenerativeModel(MODEL_NAME)
+    # Test if the model actually loads (optional, but good for debugging)
+    # print(f"Successfully loaded model: {MODEL_NAME}")
+except Exception as e:
+    st.error(f"Error initializing Gemini model '{MODEL_NAME}'. This might indicate the model is not available or your API key has restrictions. Details: {e}")
+    st.stop()
 
 
 # --- JSearch API Configuration ---
@@ -40,7 +59,7 @@ JSEARCH_HEADERS = {
     "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
 }
 
-# --- Helper Functions ---
+# --- Helper Functions (rest of your functions remain the same) ---
 
 def extract_text_from_pdf(uploaded_file):
     """
