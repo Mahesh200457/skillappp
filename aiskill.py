@@ -16,40 +16,56 @@ import google.generativeai as genai
 # --- API Keys ---
 # IMPORTANT: For a real application, consider using Streamlit Secrets or environment variables
 # instead of hardcoding keys directly in the script for better security practices.
-GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" # Your new Gemini API Key
+GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" # Your NEW Gemini API Key
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 
 # --- Configure Gemini API ---
-# Explicitly setting a regional endpoint can sometimes resolve 404s,
-# especially if the default global endpoint has issues with specific models/keys.
-# The 'us-central1' region is common for many Google Cloud services.
 try:
-    genai.configure(
-        api_key=GEMINI_API_KEY,
-        # client_options={"api_endpoint": "us-central1-aiplatform.googleapis.com"} # Uncomment if region is a persistent issue
-    )
+    genai.configure(api_key=GEMINI_API_KEY)
 except Exception as e:
     st.error(f"Failed to configure Gemini API. Please check your API key: {e}")
+    st.stop() # Stop the app if API key is invalid or configuration fails
+
+# --- IMPORTANT: MODEL DISCOVERY ---
+# >>>>> RUN THE APP FIRST. LOOK AT THE TOP OF THE STREAMLIT PAGE FOR "Available Gemini Models". <<<<<
+# >>>>> COPY ONE OF THE "MODEL NAME" STRINGS PRINTED THERE (e.g., 'gemini-1.5-flash', 'text-bison-001'). <<<<<
+# >>>>> THEN, PASTE THAT EXACT STRING BELOW TO REPLACE 'YOUR_ACTUAL_MODEL_NAME_HERE'. <<<<<
+
+# Placeholder for the model name. YOU NEED TO UPDATE THIS after running the app once.
+# If 'gemini-1.0-pro' failed, try 'gemini-1.5-flash' or another model your API lists.
+# Example: GEMINI_MODEL = genai.GenerativeModel('gemini-1.5-flash')
+try:
+    # Initially, you might see an error here if "YOUR_ACTUAL_MODEL_NAME_HERE" is still present or incorrect.
+    # RUN THE APP, FIND THE CORRECT MODEL NAME FROM THE DIAGNOSTIC OUTPUT, AND REPLACE THIS STRING.
+    GEMINI_MODEL = genai.GenerativeModel('YOUR_ACTUAL_MODEL_NAME_HERE') # <<< FIX THIS LINE AFTER DISCOVERY
+
+    # Add a check to ensure the model is indeed capable of generateContent
+    # This might print info to your console or Streamlit logs.
+    model_info = genai.get_model(GEMINI_MODEL.model_name)
+    if 'generateContent' not in model_info.supported_generation_methods:
+        st.error(f"The selected model '{GEMINI_MODEL.model_name}' does not support 'generateContent'. Please choose another from the list.")
+        st.stop()
+
+except Exception as e:
+    st.error(f"Error initializing Gemini model. This usually means the model name is incorrect or unavailable for your key/region. Please run the app and select an available model from the list at the top. Details: {e}")
     st.stop()
 
-# Initialize the Gemini model
-# FIX: Try 'gemini-1.5-flash' or 'gemini-1.5-pro' if 'gemini-1.0-pro' fails due to availability.
-# We'll stick with 'gemini-1.0-pro' as a first attempt after trying more explicit model naming.
-# Use the full model path 'models/gemini-1.0-pro' as recommended by the API error message pattern.
-# If this still fails, definitely try 'models/gemini-1.5-flash'.
-MODEL_NAME = 'gemini-1.0-pro' # The most common stable text model
-# If the above fails, uncomment and try one of these:
-# MODEL_NAME = 'gemini-1.5-flash'
-# MODEL_NAME = 'gemini-1.5-pro' # Requires higher quota/access typically
+# --- Display Available Models (Diagnostic for User) ---
+st.subheader("🛠️ Gemini Model Availability Diagnostic")
+st.warning("Please copy an 'Available Model' name from below and paste it into the code where specified ('YOUR_ACTUAL_MODEL_NAME_HERE').")
 
 try:
-    # Use the full 'models/' prefix as explicitly mentioned in Google's documentation patterns.
-    GEMINI_MODEL = genai.GenerativeModel(MODEL_NAME)
-    # Test if the model actually loads (optional, but good for debugging)
-    # print(f"Successfully loaded model: {MODEL_NAME}")
+    found_any_model = False
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            st.write(f"**Available Model:** `{m.name}` (Display Name: `{m.display_name}`)")
+            found_any_model = True
+    if not found_any_model:
+        st.error("No models found that support 'generateContent' with your current API key/configuration. Your API key might be invalid or restricted.")
 except Exception as e:
-    st.error(f"Error initializing Gemini model '{MODEL_NAME}'. This might indicate the model is not available or your API key has restrictions. Details: {e}")
-    st.stop()
+    st.error(f"Could not list models. Please verify your `GEMINI_API_KEY` is correct. Error: {e}")
+
+st.markdown("---") # Separator for clarity
 
 
 # --- JSearch API Configuration ---
@@ -59,7 +75,7 @@ JSEARCH_HEADERS = {
     "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
 }
 
-# --- Helper Functions (rest of your functions remain the same) ---
+# --- Helper Functions ---
 
 def extract_text_from_pdf(uploaded_file):
     """
@@ -106,13 +122,8 @@ def analyze_resume_with_gemini(resume_text, job_role):
     """
 
     try:
-        # Use the configured GEMINI_MODEL to generate content
         response = GEMINI_MODEL.generate_content(prompt)
-        
-        # Accessing the text from the response object
         gemini_output_text = response.text
-        
-        # Clean up potential markdown formatting that Gemini sometimes adds
         gemini_output_text = gemini_output_text.replace("```json", "").replace("```", "").strip()
 
         try:
@@ -122,7 +133,7 @@ def analyze_resume_with_gemini(resume_text, job_role):
             st.warning(f"Gemini did not return a perfect JSON. Raw output: {gemini_output_text}")
             return {"error": "JSON parsing failed from Gemini output", "raw_output": gemini_output_text}
 
-    except Exception as e: # Catch broader exceptions from the API call
+    except Exception as e:
         st.error(f"Error calling Gemini API for resume analysis: {e}")
         return {"error": str(e)}
 
@@ -138,8 +149,8 @@ def get_job_recommendations(query, num_jobs=10):
     querystring = {
         "query": query,
         "num_pages": "1",
-        "date_posted": "week", # Filter for recent jobs
-        "job_requirements": "entry_level" # Prioritize entry-level
+        "date_posted": "week",
+        "job_requirements": "entry_level"
     }
 
     try:
@@ -154,8 +165,8 @@ def get_job_recommendations(query, num_jobs=10):
                     "title": job.get('job_title', 'N/A'),
                     "company": job.get('employer_name', 'N/A'),
                     "location": job.get('job_city', 'N/A') + ", " + job.get('job_state', 'N/A') if job.get('job_city') else job.get('job_country', 'N/A'),
-                    "description": job.get('job_description', 'N/A')[:200] + "..." if job.get('job_description') else 'N/A', # Shorten description
-                    "link": job.get('job_apply_link', job.get('job_google_link', '#')) # Prefer direct apply link
+                    "description": job.get('job_description', 'N/A')[:200] + "..." if job.get('job_description') else 'N/A',
+                    "link": job.get('job_apply_link', job.get('job_google_link', '#'))
                 })
             return jobs
         else:
@@ -363,4 +374,3 @@ with col1:
 
 st.markdown("---")
 st.caption("Powered by Google Gemini & JSearch APIs")
-                                
