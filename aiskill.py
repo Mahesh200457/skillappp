@@ -885,7 +885,7 @@ with col2:
                 
                 st.session_state.chat_messages.append({"role": "user", "content": question})
                 st.session_state.chat_messages.append({"role": "assistant", "content": response})
-                st.rerun()
+                # Removed st.rerun()
     
     # Chat input
     user_input = st.text_input("Ask Gemini AI anything about your career...", key="chat_input")
@@ -896,7 +896,7 @@ with col2:
             
             st.session_state.chat_messages.append({"role": "user", "content": user_input})
             st.session_state.chat_messages.append({"role": "assistant", "content": response})
-            st.rerun()
+            # Removed st.rerun()
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -924,7 +924,7 @@ with col2:
                             <p style="color: #666; margin: 0 0 0.5rem 0;"><strong>Location:</strong> {job.get('job_city', 'N/A')}, {job.get('job_state', 'N/A')}</p>
                             <p style="color: #666; margin: 0 0 1rem 0;"><strong>Type:</strong> {job.get('job_employment_type', 'N/A')}</p>
                             <a href="{job.get('job_apply_link', '#')}" target="_blank" 
-                               style="background: #667eea; color: white; padding: 0.5rem 1rem; border-radius: 5px; text-decoration: none; display: inline-block;">
+                                style="background: #667eea; color: white; padding: 0.5rem 1rem; border-radius: 5px; text-decoration: none; display: inline-block;">
                                 Apply Now
                             </a>
                         </div>
