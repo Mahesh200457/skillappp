@@ -16,20 +16,21 @@ import google.generativeai as genai
 # --- API Keys ---
 # IMPORTANT: For a real application, consider using Streamlit Secrets or environment variables
 # instead of hardcoding keys directly in the script for better security practices.
-GEMINI_API_KEY = "AIzaSyDOsFhRWN2-uPpOZqHbU3HZ5prZkSuqiBA"
+GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" # UPDATED KEY HERE
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 
 # --- Configure Gemini API ---
-# This is the crucial change for using the official client library
 try:
     genai.configure(api_key=GEMINI_API_KEY)
 except Exception as e:
     st.error(f"Failed to configure Gemini API. Please check your API key: {e}")
-    st.stop() # Stop the app if API key is invalid or configuration fails
+    st.stop()
 
 # Initialize the Gemini model
-# Use a robust model that supports text generation. 'gemini-pro' is generally good.
-GEMINI_MODEL = genai.GenerativeModel('gemini-pro')
+# FIX: Changed 'gemini-pro' to 'gemini-1.0-pro'
+# This is a common stable text generation model.
+# If you have access to 'gemini-1.5-flash' or 'gemini-1.5-pro', you can try those as well.
+GEMINI_MODEL = genai.GenerativeModel('gemini-1.0-pro')
 
 
 # --- JSearch API Configuration ---
@@ -93,7 +94,6 @@ def analyze_resume_with_gemini(resume_text, job_role):
         gemini_output_text = response.text
         
         # Clean up potential markdown formatting that Gemini sometimes adds
-        # Example: removes "```json" and "```"
         gemini_output_text = gemini_output_text.replace("```json", "").replace("```", "").strip()
 
         try:
@@ -150,9 +150,6 @@ def get_learning_recommendations_gemini(skill_gaps, job_role):
     """
     Generates learning recommendations based on skill gaps using Gemini API.
     """
-    # Use the configured GEMINI_MODEL
-    
-    # Crafting a detailed prompt for learning recommendations
     prompt = f"""
     Based on the following skill gaps for the '{job_role}' role, provide specific and actionable learning recommendations.
     Focus on online courses, books, certifications, and practice projects.
@@ -189,8 +186,6 @@ def get_chatbot_response(user_query):
     """
     Generates a chatbot response using Gemini API.
     """
-    # Use the configured GEMINI_MODEL
-    
     prompt = f"""
     You are an AI career assistant. Respond to the user's query professionally and helpfully.
     You can provide resume improvement tips, career guidance, job search help, or course clarification.
@@ -235,7 +230,7 @@ with st.sidebar:
 
 
 # --- Main Content Area ---
-col1, col2 = st.columns([0.6, 0.4]) # Adjust column width for content and potential future use
+col1, col2 = st.columns([0.6, 0.4])
 
 with col1:
     st.subheader("1. Upload Your Resume (PDF)")
@@ -286,12 +281,11 @@ with col1:
                             for i, area in enumerate(skill_gaps_for_display):
                                 st.markdown(f"- {area}")
                         else:
-                            skill_gaps_for_display = ["Data Structures & Algorithms", "Cloud Computing (AWS/Azure)", "Advanced SQL"] # Fallback dummy
+                            skill_gaps_for_display = ["Data Structures & Algorithms", "Cloud Computing (AWS/Azure)", "Advanced SQL"]
                             st.write("### Recommended Improvement Areas: (Based on general gaps for this role)")
                             for i, area in enumerate(skill_gaps_for_display):
                                 st.markdown(f"- {area}")
                         
-                        # Simple Bar Chart for Skill Match vs. Gap
                         df_skills = pd.DataFrame({
                             'Category': ['Matched Skills', 'Skill Gaps'],
                             'Percentage': [resume_analysis.get('ats_score', 70), 100 - resume_analysis.get('ats_score', 70)]
@@ -302,10 +296,9 @@ with col1:
                                             color_discrete_map={'Matched Skills': 'lightblue', 'Skill Gaps': 'lightcoral'})
                         st.plotly_chart(fig_skill_gap, use_container_width=True)
 
-                        # --- Learning Recommendations ---
                         st.subheader("📚 Learning Recommendations")
                         st.info("Generating personalized learning recommendations...")
-                        learning_recs = get_learning_recommendations_gemini(skill_gaps_for_display, selected_role) # Use the extracted/dummy gaps
+                        learning_recs = get_learning_recommendations_gemini(skill_gaps_for_display, selected_role)
                         st.session_state['learning_recs'] = learning_recs
 
                         if learning_recs and not any("Error" in rec.get('type', '') for rec in learning_recs):
@@ -320,9 +313,8 @@ with col1:
                                 """, unsafe_allow_html=True)
                         else:
                             st.warning("Could not generate learning recommendations.")
-                            if learning_recs: st.json(learning_recs) # Show raw error if available
+                            if learning_recs: st.json(learning_recs)
 
-                        # --- Job Recommendations ---
                         st.subheader("💼 Entry-Level Job Recommendations")
                         st.info("Fetching real-time entry-level job listings...")
                         job_recommendations = get_job_recommendations(selected_role + " entry level", num_jobs=10)
@@ -344,7 +336,7 @@ with col1:
                             
                     else:
                         st.error("Failed to analyze resume. Please check the API key, the prompt formatting, or try again with a different model if issues persist.")
-                        if resume_analysis: st.json(resume_analysis) # Display raw error from Gemini
+                        if resume_analysis: st.json(resume_analysis)
                 else:
                     st.error("Could not extract text from the uploaded PDF. Please ensure it's a searchable PDF.")
     else:
@@ -352,3 +344,4 @@ with col1:
 
 st.markdown("---")
 st.caption("Powered by Google Gemini & JSearch APIs")
+                                
