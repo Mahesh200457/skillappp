@@ -16,7 +16,7 @@ import google.generativeai as genai
 # --- Streamlit Page Configuration (MUST BE THE FIRST ST COMMAND) ---
 st.set_page_config(layout="wide", page_title="AI Skill Gap Analyzer")
 
-st.title("🚀 AI-Based Skill Gap Analyzer Platform") # Moved title here
+st.title("🚀 AI-Based Skill Gap Analyzer Platform")
 
 # --- API Keys ---
 GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" 
@@ -27,48 +27,22 @@ try:
     genai.configure(api_key=GEMINI_API_KEY)
 except Exception as e:
     st.error(f"FATAL ERROR: Failed to configure Gemini API. Please check your API key: {e}")
-    st.stop() # Stop the app immediately if API key configuration fails
-
-# --- IMPORTANT: MODEL DISCOVERY (READ THIS ON YOUR RUNNING APP) ---
-# This diagnostic is now placed AFTER set_page_config, but still prominent.
-st.subheader("🛠️ Gemini Model Availability Diagnostic (IMPORTANT!)")
-st.warning("Please read this section when the app runs:")
-st.info("Below are the models available for YOUR API KEY that support text generation.")
-st.info("1. **Copy the EXACT 'Available Model:' name** (e.g., `models/gemini-1.5-flash`).")
-st.info("2. **PASTE that name** into the `GEMINI_MODEL = genai.GenerativeModel(...)` line in the Python code (around line 50).")
-st.info("3. **SAVE and REFRESH** the Streamlit page.")
-
-try:
-    found_any_model = False
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            st.write(f"**Available Model:** `{m.name}` (Display Name: `{m.display_name}`) -- Copy this exact name!")
-            found_any_model = True
-    if not found_any_model:
-        st.error("No models found that support 'generateContent' with your current API key/configuration. This means your API key might be invalid or restricted for this service.")
-        st.info("ACTION REQUIRED: Go to Google AI Studio or Google Cloud Console to generate a new API key or check its permissions.")
-        st.stop() # Stop if no models are found, as the app can't function.
-except Exception as e:
-    st.error(f"ERROR: Could not list models. Please verify your `GEMINI_API_KEY` is correct. Error: {e}")
-    st.stop() # Stop if even listing models fails.
-
-st.markdown("---") # Separator for clarity
+    st.stop() 
 
 # Initialize the Gemini model
-# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> CRITICAL FIX LINE - YOU MUST EDIT THIS AFTER DIAGNOSTIC <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-# REPLACE 'models/gemini-1.5-flash' WITH THE EXACT MODEL NAME YOU COPIED FROM THE "Available Model:" list ABOVE.
-# I'm using 'models/gemini-1.5-flash' as a strong candidate from your list.
+# Using the model YOU identified from the diagnostic.
+# This is a vision model, primarily for multimodal input, but can handle text.
 try:
-    GEMINI_MODEL = genai.GenerativeModel('models/gemini-1.5-flash') # <<< CHANGE THIS BASED ON YOUR DIAGNOSTIC OUTPUT
+    GEMINI_MODEL = genai.GenerativeModel('models/gemini-1.0-pro-vision-latest') 
     
     # Verify the selected model actually supports generateContent
     model_info = genai.get_model(GEMINI_MODEL.model_name)
     if 'generateContent' not in model_info.supported_generation_methods:
-        st.error(f"ERROR: The model you set ('{GEMINI_MODEL.model_name}') does not support 'generateContent'. Please choose another from the list above and update the code.")
+        st.error(f"ERROR: The model you set ('{GEMINI_MODEL.model_name}') does not support 'generateContent'. This should not happen if selected from diagnostic.")
         st.stop()
 
 except Exception as e:
-    st.error(f"FATAL ERROR: Could not initialize the Gemini model you specified. Please ensure you pasted the correct model name from the diagnostic. Details: {e}")
+    st.error(f"FATAL ERROR: Could not initialize the Gemini model '{GEMINI_MODEL.model_name}'. Details: {e}")
     st.stop()
 
 
@@ -79,7 +53,7 @@ JSEARCH_HEADERS = {
     "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
 }
 
-# --- Helper Functions (rest of your functions remain the same) ---
+# --- Helper Functions ---
 
 def extract_text_from_pdf(uploaded_file):
     """
@@ -233,33 +207,6 @@ def get_chatbot_response(user_query):
     except Exception as e:
         return f"Error connecting to chatbot: {e}"
 
-# --- Streamlit UI (remaining part of the original UI) ---
-# Moved to the top: st.set_page_config and st.title
-
-# --- Sidebar for Chatbot ---
-with st.sidebar:
-    st.header("🤖 AI Career Assistant")
-    st.write("Ask me anything about resume improvement, career guidance, job search, or courses!")
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("How can I help you?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                response = get_chatbot_response(prompt)
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-
-
 # --- Main Content Area ---
 col1, col2 = st.columns([0.6, 0.4])
 
@@ -375,3 +322,32 @@ with col1:
 
 st.markdown("---")
 st.caption("Powered by Google Gemini & JSearch APIs")
+
+with col2:
+    # --- Chatbot (Moved to main column - right side) ---
+    st.header("🤖 AI Career Assistant")
+    st.write("Ask me anything about resume improvement, career guidance, job search, or courses!")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat messages from history on app rerun
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Accept user input
+    if prompt := st.chat_input("How can I help you?"):
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        # Display user message in chat message container
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Display assistant response in chat message container
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                response = get_chatbot_response(prompt)
+                st.markdown(response)
+                # Add assistant response to chat history
+                st.session_state.messages.append({"role": "assistant", "content": response})
