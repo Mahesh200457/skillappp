@@ -14,58 +14,58 @@ from datetime import datetime, timedelta
 import google.generativeai as genai
 
 # --- API Keys ---
-# IMPORTANT: For a real application, consider using Streamlit Secrets or environment variables
-# instead of hardcoding keys directly in the script for better security practices.
-GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" # Your NEW Gemini API Key
+# YOUR GEMINI_API_KEY IS HERE. If this key is not valid or restricted, no models will be found.
+GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" 
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 
 # --- Configure Gemini API ---
 try:
     genai.configure(api_key=GEMINI_API_KEY)
 except Exception as e:
-    st.error(f"Failed to configure Gemini API. Please check your API key: {e}")
-    st.stop() # Stop the app if API key is invalid or configuration fails
+    st.error(f"FATAL ERROR: Failed to configure Gemini API. Please check your API key: {e}")
+    st.stop() # Stop the app immediately if API key configuration fails
 
-# --- IMPORTANT: MODEL DISCOVERY ---
-# >>>>> RUN THE APP FIRST. LOOK AT THE TOP OF THE STREAMLIT PAGE FOR "Available Gemini Models". <<<<<
-# >>>>> COPY ONE OF THE "MODEL NAME" STRINGS PRINTED THERE (e.g., 'gemini-1.5-flash', 'text-bison-001'). <<<<<
-# >>>>> THEN, PASTE THAT EXACT STRING BELOW TO REPLACE 'YOUR_ACTUAL_MODEL_NAME_HERE'. <<<<<
-
-# Placeholder for the model name. YOU NEED TO UPDATE THIS after running the app once.
-# If 'gemini-1.0-pro' failed, try 'gemini-1.5-flash' or another model your API lists.
-# Example: GEMINI_MODEL = genai.GenerativeModel('gemini-1.5-flash')
-try:
-    # Initially, you might see an error here if "YOUR_ACTUAL_MODEL_NAME_HERE" is still present or incorrect.
-    # RUN THE APP, FIND THE CORRECT MODEL NAME FROM THE DIAGNOSTIC OUTPUT, AND REPLACE THIS STRING.
-    GEMINI_MODEL = genai.GenerativeModel('YOUR_ACTUAL_MODEL_NAME_HERE') # <<< FIX THIS LINE AFTER DISCOVERY
-
-    # Add a check to ensure the model is indeed capable of generateContent
-    # This might print info to your console or Streamlit logs.
-    model_info = genai.get_model(GEMINI_MODEL.model_name)
-    if 'generateContent' not in model_info.supported_generation_methods:
-        st.error(f"The selected model '{GEMINI_MODEL.model_name}' does not support 'generateContent'. Please choose another from the list.")
-        st.stop()
-
-except Exception as e:
-    st.error(f"Error initializing Gemini model. This usually means the model name is incorrect or unavailable for your key/region. Please run the app and select an available model from the list at the top. Details: {e}")
-    st.stop()
-
-# --- Display Available Models (Diagnostic for User) ---
-st.subheader("🛠️ Gemini Model Availability Diagnostic")
-st.warning("Please copy an 'Available Model' name from below and paste it into the code where specified ('YOUR_ACTUAL_MODEL_NAME_HERE').")
+# --- IMPORTANT: MODEL DISCOVERY (READ THIS ON YOUR RUNNING APP) ---
+st.subheader("🛠️ Gemini Model Availability Diagnostic (IMPORTANT!)")
+st.warning("Please read this section when the app runs:")
+st.info("Below are the models available for YOUR API KEY that support text generation.")
+st.info("1. **Copy the EXACT 'Available Model:' name** (e.g., `gemini-1.5-flash`).")
+st.info("2. **PASTE that name** into the `GEMINI_MODEL = genai.GenerativeModel(...)` line in the Python code (around line 35).")
+st.info("3. **SAVE and REFRESH** the Streamlit page.")
 
 try:
     found_any_model = False
     for m in genai.list_models():
         if 'generateContent' in m.supported_generation_methods:
-            st.write(f"**Available Model:** `{m.name}` (Display Name: `{m.display_name}`)")
+            st.write(f"**Available Model:** `{m.name}` (Display Name: `{m.display_name}`) -- Copy this exact name!")
             found_any_model = True
     if not found_any_model:
-        st.error("No models found that support 'generateContent' with your current API key/configuration. Your API key might be invalid or restricted.")
+        st.error("No models found that support 'generateContent' with your current API key/configuration. This means your API key might be invalid or restricted for this service.")
+        st.info("ACTION REQUIRED: Go to Google AI Studio or Google Cloud Console to generate a new API key or check its permissions.")
+        st.stop() # Stop if no models are found, as the app can't function.
 except Exception as e:
-    st.error(f"Could not list models. Please verify your `GEMINI_API_KEY` is correct. Error: {e}")
+    st.error(f"ERROR: Could not list models. Please verify your `GEMINI_API_KEY` is correct. Error: {e}")
+    st.stop() # Stop if even listing models fails.
 
 st.markdown("---") # Separator for clarity
+
+# Initialize the Gemini model
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> CRITICAL FIX LINE - YOU MUST EDIT THIS AFTER DIAGNOSTIC <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+# REPLACE 'gemini-1.5-flash' WITH THE EXACT MODEL NAME YOU COPIED FROM THE "Available Model:" list ABOVE.
+# For example: GEMINI_MODEL = genai.GenerativeModel('models/text-bison-001')
+# For example: GEMINI_MODEL = genai.GenerativeModel('gemini-1.5-flash')
+try:
+    GEMINI_MODEL = genai.GenerativeModel('gemini-1.5-flash') # <<< CHANGE THIS BASED ON YOUR DIAGNOSTIC OUTPUT
+    
+    # Verify the selected model actually supports generateContent
+    model_info = genai.get_model(GEMINI_MODEL.model_name)
+    if 'generateContent' not in model_info.supported_generation_methods:
+        st.error(f"ERROR: The model you set ('{GEMINI_MODEL.model_name}') does not support 'generateContent'. Please choose another from the list above and update the code.")
+        st.stop()
+
+except Exception as e:
+    st.error(f"FATAL ERROR: Could not initialize the Gemini model you specified. Please ensure you pasted the correct model name from the diagnostic. Details: {e}")
+    st.stop()
 
 
 # --- JSearch API Configuration ---
@@ -75,7 +75,7 @@ JSEARCH_HEADERS = {
     "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
 }
 
-# --- Helper Functions ---
+# --- Helper Functions (rest of your functions remain the same) ---
 
 def extract_text_from_pdf(uploaded_file):
     """
