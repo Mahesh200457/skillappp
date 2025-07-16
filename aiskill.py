@@ -13,8 +13,12 @@ from datetime import datetime, timedelta
 # Import the Google Generative AI library
 import google.generativeai as genai
 
+# --- Streamlit Page Configuration (MUST BE THE FIRST ST COMMAND) ---
+st.set_page_config(layout="wide", page_title="AI Skill Gap Analyzer")
+
+st.title("🚀 AI-Based Skill Gap Analyzer Platform") # Moved title here
+
 # --- API Keys ---
-# YOUR GEMINI_API_KEY IS HERE. If this key is not valid or restricted, no models will be found.
 GEMINI_API_KEY = "AIzaSyC9xWVau-jGsCd2bxromOhd2zCES9N9Ego" 
 JSEARCH_API_KEY = "2cab498475mshcc1eeb3378ca34dp193e9fjsn4f1fd27b904e"
 
@@ -26,11 +30,12 @@ except Exception as e:
     st.stop() # Stop the app immediately if API key configuration fails
 
 # --- IMPORTANT: MODEL DISCOVERY (READ THIS ON YOUR RUNNING APP) ---
+# This diagnostic is now placed AFTER set_page_config, but still prominent.
 st.subheader("🛠️ Gemini Model Availability Diagnostic (IMPORTANT!)")
 st.warning("Please read this section when the app runs:")
 st.info("Below are the models available for YOUR API KEY that support text generation.")
-st.info("1. **Copy the EXACT 'Available Model:' name** (e.g., `gemini-1.5-flash`).")
-st.info("2. **PASTE that name** into the `GEMINI_MODEL = genai.GenerativeModel(...)` line in the Python code (around line 35).")
+st.info("1. **Copy the EXACT 'Available Model:' name** (e.g., `models/gemini-1.5-flash`).")
+st.info("2. **PASTE that name** into the `GEMINI_MODEL = genai.GenerativeModel(...)` line in the Python code (around line 50).")
 st.info("3. **SAVE and REFRESH** the Streamlit page.")
 
 try:
@@ -51,11 +56,10 @@ st.markdown("---") # Separator for clarity
 
 # Initialize the Gemini model
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> CRITICAL FIX LINE - YOU MUST EDIT THIS AFTER DIAGNOSTIC <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-# REPLACE 'gemini-1.5-flash' WITH THE EXACT MODEL NAME YOU COPIED FROM THE "Available Model:" list ABOVE.
-# For example: GEMINI_MODEL = genai.GenerativeModel('models/text-bison-001')
-# For example: GEMINI_MODEL = genai.GenerativeModel('gemini-1.5-flash')
+# REPLACE 'models/gemini-1.5-flash' WITH THE EXACT MODEL NAME YOU COPIED FROM THE "Available Model:" list ABOVE.
+# I'm using 'models/gemini-1.5-flash' as a strong candidate from your list.
 try:
-    GEMINI_MODEL = genai.GenerativeModel('gemini-1.5-flash') # <<< CHANGE THIS BASED ON YOUR DIAGNOSTIC OUTPUT
+    GEMINI_MODEL = genai.GenerativeModel('models/gemini-1.5-flash') # <<< CHANGE THIS BASED ON YOUR DIAGNOSTIC OUTPUT
     
     # Verify the selected model actually supports generateContent
     model_info = genai.get_model(GEMINI_MODEL.model_name)
@@ -229,11 +233,8 @@ def get_chatbot_response(user_query):
     except Exception as e:
         return f"Error connecting to chatbot: {e}"
 
-# --- Streamlit UI ---
-
-st.set_page_config(layout="wide", page_title="AI Skill Gap Analyzer")
-
-st.title("🚀 AI-Based Skill Gap Analyzer Platform")
+# --- Streamlit UI (remaining part of the original UI) ---
+# Moved to the top: st.set_page_config and st.title
 
 # --- Sidebar for Chatbot ---
 with st.sidebar:
