@@ -953,4 +953,4 @@ st.markdown("""
     <p>🎯 AI Skill Gap Analyzer - Powered by Google Gemini AI</p>
     <p>Built with ❤️ for Students and Entry-Level Professionals</p>
 </div>
-""", unsafe_allow_html=Tr
+""", unsafe_allow_html=True)
